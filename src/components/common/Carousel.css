@@ -1,0 +1,238 @@
+
+/* Khung carousel */
+.carousel {
+  position: relative;
+  width: min(1200px, calc(100% - 48px));
+  margin: 32px auto;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #172033;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+}
+
+/* Ảnh nền */
+.carousel-image {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 480px;
+  padding: 64px 80px;
+  background-size: cover;
+  background-position: center;
+  isolation: isolate;
+  color: #fff;
+  animation: fade-in 0.5s ease;
+}
+
+/* Lớp phủ giúp chữ dễ đọc */
+.carousel-image::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(8, 15, 30, 0.82) 0%,
+      rgba(8, 15, 30, 0.52) 45%,
+      rgba(8, 15, 30, 0.05) 100%
+    );
+}
+
+/* Nội dung */
+.carousel-overlay {
+  max-width: 620px;
+}
+
+.carousel-eyebrow {
+  display: inline-block;
+  margin-bottom: 20px;
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+
+.carousel-overlay h2 {
+  margin: 0 0 20px;
+  font-size: clamp(36px, 5vw, 64px);
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+}
+
+.carousel-overlay p {
+  max-width: 480px;
+  margin: 0 0 30px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+/* Nút CTA */
+.carousel-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 22px;
+  border-radius: 999px;
+  background: #fff;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.carousel-cta:hover {
+  background: #60a5fa;
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+/* Nút chuyển ảnh */
+.carousel-btn {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transform: translateY(-50%);
+  transition: background 0.2s ease;
+}
+
+.carousel-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.carousel-btn-prev {
+  left: 20px;
+}
+
+.carousel-btn-next {
+  right: 20px;
+}
+
+/* Dấu chấm điều hướng */
+.carousel-indicators {
+  position: absolute;
+  bottom: 28px;
+  left: 80px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.carousel-dot {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition:
+    width 0.25s ease,
+    background 0.25s ease;
+}
+
+.carousel-dot.active {
+  width: 30px;
+  background: #fff;
+}
+
+/* Bộ đếm slide */
+.carousel-counter {
+  position: absolute;
+  right: 28px;
+  bottom: 26px;
+  z-index: 2;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+/* Chuyển động nhẹ */
+@keyframes fade-in {
+  from {
+    opacity: 0.6;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .carousel {
+    width: calc(100% - 24px);
+    margin: 16px auto;
+    border-radius: 16px;
+  }
+
+  .carousel-image {
+    min-height: 440px;
+    padding: 48px 28px 90px;
+  }
+
+  .carousel-overlay h2 {
+    font-size: 40px;
+    letter-spacing: -0.8px;
+  }
+
+  .carousel-overlay p {
+    font-size: 14px;
+  }
+
+  .carousel-btn {
+    width: 38px;
+    height: 38px;
+    font-size: 20px;
+  }
+
+  .carousel-btn-prev {
+    left: 10px;
+  }
+
+  .carousel-btn-next {
+    right: 10px;
+  }
+
+  .carousel-indicators {
+    left: 28px;
+    bottom: 28px;
+  }
+
+  .carousel-counter {
+    right: 18px;
+    bottom: 26px;
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .carousel-image {
+    animation: none;
+  }
+
+  .carousel-cta,
+  .carousel-btn,
+  .carousel-dot {
+    transition: none;
+  }
+}

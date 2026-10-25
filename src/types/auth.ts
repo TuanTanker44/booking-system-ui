@@ -1,8 +1,17 @@
-export type UserRole = 'ADMIN' | 'STAFF' | 'CUSTOMER';
+import type { User } from "./user.js";
 
-export interface AuthUser {
-  id: string;
+export interface LoginDto {
+  email: string;
+  password: string;
+}
+
+export interface RegisterDto {
   name: string;
   email: string;
-  role: UserRole;
+  password: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  accessToken: string;
 }

@@ -1,11 +1,25 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { getCurrentUser, hasAccessToken } from '../app/auth';
-import type { UserRole } from '../types/auth';
+import { Navigate, Outlet } from "react-router-dom";
+import { useUserStore } from "../stores/user.js";
+import type { UserRole } from "../types/user";
 
-export function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
-  const user = getCurrentUser();
+export function ProtectedRoute({
+  roles,
+}: {
+  roles?: UserRole[];
+}) {
+  const user = useUserStore((state) => state.user);
+  const accessToken = useUserStore(
+    (state) => state.accessToken,
+  );
+  const initialized = useUserStore(
+    (state) => state.initialized,
+  );
 
-  if (!hasAccessToken() || !user) {
+  if (!initialized) {
+    return <div>Đang kiểm tra đăng nhập...</div>;
+  }
+
+  if (!accessToken || !user) {
     return <Navigate to="/login" replace />;
   }
 

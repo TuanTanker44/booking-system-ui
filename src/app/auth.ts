@@ -1,12 +1,12 @@
-import type { AuthUser } from '../types/auth';
+import type { User } from '../types/user';
 
-export function getCurrentUser(): AuthUser | null {
+export function getCurrentUser(): User | null {
   const raw = localStorage.getItem('user');
 
   if (!raw) return null;
 
   try {
-    return JSON.parse(raw) as AuthUser;
+    return JSON.parse(raw) as User;
   } catch {
     localStorage.removeItem('user');
     return null;

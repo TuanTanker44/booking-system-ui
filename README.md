@@ -73,5 +73,50 @@ export default defineConfig([
     },
   },
 ])
-
 ```
+
+# Laundry Booking — Customer UI
+
+Giao diện mẫu React + TypeScript cho khu vực Customer của Laundry Booking System. Thiết kế responsive theo phong cách xanh dương/trắng, sử dụng React state và dữ liệu mock để demo luồng đặt lịch.
+
+## Chạy dự án
+
+Yêu cầu Node.js 20+ và pnpm/npm.
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Hoặc:
+
+```bash
+npm install
+npm run dev
+```
+
+## Các màn hình
+
+- Trang chủ: dịch vụ, cửa hàng, ưu điểm và CTA đặt lịch.
+- Đặt lịch giặt: chọn cửa hàng, chọn dịch vụ/số lượng, chọn thời gian và địa chỉ, chọn phương thức thanh toán, xác nhận.
+- Đơn hàng: lọc/tìm kiếm đơn, xem chi tiết và tiến trình trạng thái.
+- Địa chỉ: xem, thêm, đặt địa chỉ mặc định, xóa (dữ liệu demo).
+- Tài khoản: cập nhật thông tin cá nhân (dữ liệu demo).
+- Responsive: sidebar desktop, bottom navigation mobile.
+
+## Cài vào frontend hiện có
+
+Có thể copy `src/App.tsx` và `src/styles.css` vào frontend hiện tại, sau đó bảo đảm đã cài `lucide-react`. `main.tsx` và `index.html` chỉ cần nếu dùng như ứng dụng Vite độc lập.
+
+## Lưu ý tích hợp backend
+
+Đây là UI demo, chưa gọi API và chưa có xác thực thực tế. Các thao tác thêm/sửa/xóa, thanh toán, mã ưu đãi, thông báo, đăng xuất và theo dõi thời gian thực hiện đang dùng state cục bộ.
+
+Khi tích hợp NestJS API:
+
+- Tạo `authService`, `bookingService`, `storeService`, `addressService`, `paymentService`.
+- Thay dữ liệu mock bằng API, bổ sung loading/error/empty states.
+- Tính tiền cọc, phí giao nhận và tổng tiền từ backend; không tin số tiền do client gửi lên.
+- Lấy ngày/khung giờ khả dụng từ `store_schedules` và `store_schedule_exceptions`.
+- Đồng bộ trạng thái đơn hàng theo enum backend; cân nhắc polling hoặc WebSocket/SSE.
+- Bảo vệ các trang Customer bằng route guard và access token theo chiến lược auth của dự án.
