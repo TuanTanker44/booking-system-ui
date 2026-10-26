@@ -1,5 +1,10 @@
 import { useMemo, useState } from "react";
 import { LocationPermissionDialog } from "../../components/customer/LocationPermissionDialog";
+import { Avatar } from "../../components/common/Avatar";
+import { useUserStore } from "../../stores/user.js";
+import { GlobalSearch } from "../../components/customer/GlobalSearch";
+import type { SearchEntry } from "../../lib/search";
+import type { ApiStore } from "../../services/store";
 import {
   MapPin, Home, CalendarDays, Package, MapPinned, UserRound, Settings,
   Search, Bell, ChevronDown, ChevronRight, Plus, Clock3, Star, Truck,
@@ -36,6 +41,8 @@ const statusClass = (status: OrderStatus) => status === "Hoàn thành" ? "succes
 const iconFor = (icon: Service["icon"]) => icon === "wash" ? <WashingMachine /> : icon === "shirt" ? <Shirt /> : <Sparkles />;
 
 export function CustomerDashboardPage() {
+  const user = useUserStore((state) => state.user);
+  const displayName = user?.fullName || user?.email || "Khách hàng";
   const [page, setPage] = useState<Page>("home");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [search, setSearch] = useState("");
@@ -114,7 +121,7 @@ export function CustomerDashboardPage() {
         </div>
         <div className="sidebar-bottom">
           <button className="nav-item" onClick={() => notify("Trung tâm hỗ trợ sẽ sớm kết nối.")}><CircleHelp /><span>Trợ giúp & hỗ trợ</span></button>
-          <div className="sidebar-user"><div className="avatar">NT</div><div><strong>Ngô Tuấn</strong><small>Khách hàng</small></div><ChevronDown size={16} /></div>
+          <div className="sidebar-user"><Avatar className="avatar" name={displayName} src={user?.avatarUrl} /><div><strong>{displayName}</strong><small>Khách hàng</small></div><ChevronDown size={16} /></div>
         </div>
       </aside>
 
@@ -125,7 +132,7 @@ export function CustomerDashboardPage() {
           <div className="topbar-actions">
             <button className="icon-button notification-button" aria-label="Thông báo" onClick={() => notify("Bạn đã xem các thông báo mới nhất.")}><Bell /><i /></button>
             <div className="topbar-divider" />
-            <button className="user-menu" onClick={() => navigate("profile")}><div className="avatar small-avatar">NT</div><span>Ngô Tuấn</span><ChevronDown size={15} /></button>
+            <button className="user-menu" onClick={() => navigate("profile")}><Avatar className="avatar small-avatar" name={displayName} src={user?.avatarUrl} /><span>{displayName}</span><ChevronDown size={15} /></button>
           </div>
         </header>
 
@@ -268,13 +275,15 @@ function AddressesPage({ notify, detectedAddress }: { notify: (message: string) 
 }
 
 function ProfilePage({ notify }: { notify: (message: string) => void }) {
-  const [name, setName] = useState("Ngô Tuấn");
-  const [email, setEmail] = useState("tuan.ngo@example.com");
-  const [phone, setPhone] = useState("0912 345 678");
+  const user = useUserStore((state) => state.user);
+  const displayName = user?.fullName || user?.email || "Khách hàng";
+  const [name, setName] = useState(user?.fullName ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [phone, setPhone] = useState(user?.phone ?? "");
   const [editing, setEditing] = useState(false);
   return <>
     <PageHeading eyebrow="TÀI KHOẢN CỦA BẠN" title="Thông tin cá nhân" description="Cập nhật thông tin để chúng tôi phục vụ bạn tốt hơn." />
-    <div className="profile-layout"><aside className="panel profile-menu"><div className="profile-identity"><div className="profile-avatar">NT</div><h3>{name}</h3><p>Thành viên từ tháng 08/2026</p><span className="member-chip"><BadgeCheck size={14} /> Tài khoản đã xác thực</span></div><div className="profile-menu-list"><button className="active"><UserRound /> Thông tin cá nhân <ChevronRight /></button><button onClick={() => notify("Chức năng đổi mật khẩu sẽ kết nối API.")}><Settings /> Đổi mật khẩu <ChevronRight /></button><button onClick={() => notify("Bạn chưa có đánh giá mới.")}><Star /> Đánh giá của tôi <ChevronRight /></button><button onClick={() => notify("Trung tâm khiếu nại sẽ sớm kết nối.")}><CircleHelp /> Hỗ trợ & khiếu nại <ChevronRight /></button></div><button className="logout-button" onClick={() => notify("Chức năng đăng xuất sẽ kết nối Auth API.")}><LogOut /> Đăng xuất</button></aside>
+    <div className="profile-layout"><aside className="panel profile-menu"><div className="profile-identity"><Avatar className="profile-avatar" name={name || displayName} src={user?.avatarUrl} /><h3>{name}</h3><p>Thành viên từ tháng 08/2026</p><span className="member-chip"><BadgeCheck size={14} /> Tài khoản đã xác thực</span></div><div className="profile-menu-list"><button className="active"><UserRound /> Thông tin cá nhân <ChevronRight /></button><button onClick={() => notify("Chức năng đổi mật khẩu sẽ kết nối API.")}><Settings /> Đổi mật khẩu <ChevronRight /></button><button onClick={() => notify("Bạn chưa có đánh giá mới.")}><Star /> Đánh giá của tôi <ChevronRight /></button><button onClick={() => notify("Trung tâm khiếu nại sẽ sớm kết nối.")}><CircleHelp /> Hỗ trợ & khiếu nại <ChevronRight /></button></div><button className="logout-button" onClick={() => notify("Chức năng đăng xuất sẽ kết nối Auth API.")}><LogOut /> Đăng xuất</button></aside>
       <div className="panel profile-form-panel"><div className="panel-heading"><div><h2>Thông tin cơ bản</h2><p>Thông tin cá nhân của bạn được bảo mật.</p></div><button className="outline-button" onClick={() => editing ? (setEditing(false), notify("Đã lưu thông tin (bản demo).")) : setEditing(true)}>{editing ? <><Check size={15} /> Lưu thay đổi</> : <><Pencil size={15} /> Chỉnh sửa</>}</button></div><div className="profile-form"><label className="field-label">Họ và tên<input disabled={!editing} value={name} onChange={e => setName(e.target.value)} /></label><label className="field-label">Địa chỉ email<input disabled={!editing} type="email" value={email} onChange={e => setEmail(e.target.value)} /></label><label className="field-label">Số điện thoại<input disabled={!editing} value={phone} onChange={e => setPhone(e.target.value)} /></label><label className="field-label">Ngày sinh<input disabled={!editing} type="date" defaultValue="2003-08-15" /></label><label className="field-label field-span">Địa chỉ mặc định<input disabled value="123 Nguyễn Văn Cừ, Quận 1, TP.HCM" /></label></div><div className="profile-security"><span><BadgeCheck /></span><div><strong>Bảo mật tài khoản</strong><p>Email và số điện thoại giúp bạn nhận thông báo về lịch lấy đồ, giao đồ và cập nhật đơn hàng.</p></div><button className="text-link" onClick={() => notify("Chức năng bảo mật sẽ kết nối Auth API.")}>Thiết lập <ArrowRight size={14} /></button></div></div>
     </div>
   </>;

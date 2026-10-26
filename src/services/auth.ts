@@ -8,6 +8,7 @@ interface ApiUser {
   full_name: string;
   email: string;
   phone: string | null;
+  avatar_url: string | null;
   role: "admin" | "laundry_staff" | "shipper" | "customer";
   status: "active" | "inactive" | "banned";
   created_at: string;
@@ -30,6 +31,7 @@ function toUser(apiUser: ApiUser): User {
   return {
     id: apiUser.id,
     fullName: apiUser.full_name,
+    avatarUrl: apiUser.avatar_url,
     email: apiUser.email,
     phone: apiUser.phone ?? "",
     role: ROLE_MAP[apiUser.role],

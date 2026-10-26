@@ -247,7 +247,7 @@ svg {
   padding: 17px 6px 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .avatar {
@@ -260,6 +260,14 @@ svg {
   color: #0878f9;
   font-weight: 800;
   font-size: 12px;
+  overflow: hidden;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 
 .sidebar-user strong,
@@ -274,7 +282,7 @@ svg {
 .sidebar-user small {
   font-size: 10px;
   color: #8b9ab0;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .sidebar-user > svg {
@@ -367,7 +375,7 @@ svg {
   background: transparent;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   color: #344967;
   font-size: 11px;
   font-weight: 700;
@@ -507,6 +515,27 @@ svg {
 .hero-search button svg,
 .primary-button svg {
   width: 14px;
+}
+/* Địa chỉ người dùng (từ vị trí hiện tại) thay cho ô nhập ở hero */
+.hero-location {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  color: #344967;
+}
+.hero-search .hero-location-change {
+  background: transparent;
+  box-shadow: none;
+  color: #1d6fe0;
+  padding: 8px 6px;
+  font-weight: 700;
+}
+.hero-search .hero-location-change:hover {
+  text-decoration: underline;
 }
 .hero-trust {
   display: flex;
@@ -2406,6 +2435,9 @@ td small.table-subtitle {
   justify-content: center;
   gap: 8px;
   color: #0878f9;
+  &:hover {
+    background: #ecf2fd;
+  }
 }
 .add-address-card > span {
   width: 40px;
@@ -2414,6 +2446,15 @@ td small.table-subtitle {
   display: grid;
   place-items: center;
   background: #e8f2ff;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+.add-address-card:hover > span {
+  background: #0878f9;
+  color: #fff;
+  transform: scale(1.08);
 }
 .add-address-card strong {
   font-size: 11px;
@@ -2481,6 +2522,7 @@ td small.table-subtitle {
   font-size: 20px;
   font-weight: 800;
   box-shadow: 0 5px 15px #0878f91a;
+  overflow: hidden;
 }
 .profile-identity h3 {
   font-size: 14px;
@@ -3412,5 +3454,12 @@ td small.table-subtitle {
   }
   .booking-summary {
     margin-bottom: 13px;
+  }
+}
+
+/* Ô tìm kiếm trên topbar: nhường chỗ cho breadcrumb ở màn hình nhỏ */
+@media (max-width: 900px) {
+  .topbar .breadcrumb {
+    display: none;
   }
 }
