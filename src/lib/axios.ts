@@ -3,12 +3,12 @@ import axios, {
   type AxiosInstance,
   type InternalAxiosRequestConfig,
 } from 'axios';
+import { useUserStore } from '../stores/user.js';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 interface RefreshResponse {
-  accessToken: string;
-  refreshToken: string;
+  access_token: string;
 }
 
 interface RetryRequestConfig extends InternalAxiosRequestConfig {
@@ -17,6 +17,7 @@ interface RetryRequestConfig extends InternalAxiosRequestConfig {
 
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -24,21 +25,21 @@ const axiosInstance: AxiosInstance = axios.create({
 
 // Token storage
 const getAccessToken = () => {
-  return localStorage.getItem('accessToken');
-};
-
-const getRefreshToken = () => {
-  return localStorage.getItem('refreshToken');
-};
-
-const setTokens = (accessToken: string, refreshToken: string) => {
-  localStorage.setItem('accessToken', accessToken);
-  localStorage.setItem('refreshToken', refreshToken);
+  return (
+    useUserStore.getState().accessToken ??
+    localStorage.getItem('accessToken')
+  );
 };
 
 const clearTokens = () => {
   localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
+
+  // Xoá phiên trong store để ProtectedRoute tự điều hướng về /login
+  useUserStore.setState({
+    user: null,
+    accessToken: null,
+    isAuthenticated: false,
+  });
 };
 
 // Request interceptor
@@ -59,23 +60,16 @@ axiosInstance.interceptors.request.use(
 let refreshPromise: Promise<string> | null = null;
 
 const refreshAccessToken = async (): Promise<string> => {
-  const refreshToken = getRefreshToken();
-
-  if (!refreshToken) {
-    throw new Error('Refresh token not found');
-  }
-
+  // Refresh token nằm trong cookie httpOnly, trình duyệt tự gửi kèm
   const response = await axios.post<RefreshResponse>(
     `${API_URL}/auth/refresh`,
-    {
-      refreshToken,
-    },
+    undefined,
+    { withCredentials: true },
   );
 
-  const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
-    response.data;
+  const newAccessToken = response.data.access_token;
 
-  setTokens(newAccessToken, newRefreshToken);
+  useUserStore.getState().setAccessToken(newAccessToken);
 
   return newAccessToken;
 };
@@ -96,10 +90,17 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // Login/register trả 401 là lỗi nghiệp vụ, giữ nguyên để hiển thị message
+    if (
+      originalRequest.url?.includes('/auth/login') ||
+      originalRequest.url?.includes('/auth/register')
+    ) {
+      return Promise.reject(error);
+    }
+
     // Không refresh lại chính request refresh
     if (originalRequest.url?.includes('/auth/refresh')) {
       clearTokens();
-      window.location.href = '/login';
 
       return Promise.reject(error);
     }
@@ -126,7 +127,6 @@ axiosInstance.interceptors.response.use(
       return axiosInstance(originalRequest);
     } catch (refreshError) {
       clearTokens();
-      window.location.href = '/login';
 
       return Promise.reject(refreshError);
     }

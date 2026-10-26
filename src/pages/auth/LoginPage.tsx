@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { getErrorMessage } from "../../lib/error.js";
 import { useUserStore } from "../../stores/user.js";
+import "./LoginPage.css";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -21,7 +23,6 @@ export function LoginPage() {
     try {
       await login({ email, password });
 
-      // Lấy user mới nhất sau khi đăng nhập
       const currentUser = useUserStore.getState().user;
 
       if (!currentUser) {
@@ -47,48 +48,85 @@ export function LoginPage() {
         default:
           navigate("/forbidden", { replace: true });
       }
-    } catch {
-      setError("Email hoặc mật khẩu không chính xác.");
+    } catch (err: unknown) {
+      setError(
+        getErrorMessage(err, "Email hoặc mật khẩu không chính xác."),
+      );
     }
   }
 
   return (
     <main className="auth-page">
+      <div className="auth-decoration auth-decoration-1" />
+      <div className="auth-decoration auth-decoration-2" />
+
       <section className="auth-card">
-        <h1>Đăng nhập</h1>
-        <p>Đăng nhập để quản lý lịch đặt giặt của bạn.</p>
+        <div className="auth-logo">
+          <img className="auth-logo-icon" src="/logo.png" alt="" />
+          <span>LaundryCare</span>
+        </div>
+
+        <div className="auth-heading">
+          <h1>Chào mừng trở lại!</h1>
+          <p>
+            Đăng nhập để quản lý lịch đặt giặt
+            <br />
+            và trải nghiệm dịch vụ của bạn.
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit}>
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+          <div className="auth-form-group">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              placeholder="example@email.com"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
 
-          <label htmlFor="password">Mật khẩu</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div className="auth-form-group">
+            <label htmlFor="password">Mật khẩu</label>
+            <input
+              id="password"
+              type="password"
+              placeholder="Nhập mật khẩu của bạn"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
 
-          {error && <p role="alert">{error}</p>}
+          {error && (
+            <p className="auth-error" role="alert">
+              {error}
+            </p>
+          )}
 
-          <button type="submit" disabled={isLoading}>
+          <button
+            className="auth-submit"
+            type="submit"
+            disabled={isLoading}
+          >
             {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}
           </button>
         </form>
 
-        <p>
-          Chưa có tài khoản? <Link to="/register">Đăng ký</Link>
-        </p>
+        <div className="auth-footer">
+          <p>
+            Chưa có tài khoản?{" "}
+            <Link to="/register">Đăng ký ngay</Link>
+          </p>
+        </div>
+
+        <div className="auth-bottom-note">
+          Chăm sóc quần áo, chăm sóc cuộc sống.
+        </div>
       </section>
     </main>
   );

@@ -1,5 +1,3 @@
-import type { User } from "./user.js";
-
 export interface LoginDto {
   email: string;
   password: string;
@@ -11,7 +9,7 @@ export interface RegisterDto {
   password: string;
 }
 
+// Refresh token do backend đặt trong cookie httpOnly nên không có ở đây
 export interface AuthResponse {
-  user: User;
   accessToken: string;
 }

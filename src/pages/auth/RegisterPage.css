@@ -1,0 +1,118 @@
+/* ===== Register page ===== */
+
+.register-page {
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+
+.register-card {
+  max-width: 460px;
+  padding: 36px 40px;
+}
+
+/* Logo */
+.auth-logo-image {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+/* Heading */
+.register-card .auth-heading {
+  margin-bottom: 24px;
+}
+
+.register-card .auth-heading h1 {
+  font-size: 27px;
+}
+
+/* Form */
+.register-card form {
+  gap: 16px;
+}
+
+.register-card .auth-form-group {
+  gap: 8px;
+}
+
+.register-card .auth-form-group input {
+  height: 46px;
+}
+
+/* Password checklist */
+.password-checklist {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.password-rule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  color: #6b7280;
+  font-size: 12.5px;
+  line-height: 1.4;
+  transition: color 0.2s;
+}
+
+.password-rule span {
+  flex: none;
+  width: 14px;
+  text-align: center;
+}
+
+.password-rule-passed {
+  color: #15803d;
+}
+
+/* Success message */
+.register-success {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+
+  color: #166534;
+  background: #f0fdf4;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Button */
+.register-card .auth-submit {
+  margin-top: 4px;
+}
+
+/* Footer */
+.register-card .auth-footer {
+  margin-top: 22px;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .register-page {
+    padding: 24px 16px;
+  }
+
+  .register-card {
+    padding: 28px 22px;
+  }
+
+  .register-card .auth-heading h1 {
+    font-size: 25px;
+  }
+
+  .password-checklist {
+    grid-template-columns: 1fr;
+  }
+
+  .register-card form {
+    gap: 15px;
+  }
+}

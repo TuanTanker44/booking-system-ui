@@ -1,6 +1,5 @@
+import axiosInstance from "../lib/axios";
 import type { User } from "../types/user";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 
 export interface GetUsersParams {
   page?: number;
@@ -21,42 +20,15 @@ export interface PaginatedUsers {
 export async function getUsers(
   params: GetUsersParams = {},
 ): Promise<PaginatedUsers> {
-  const query = new URLSearchParams();
-
-  if (params.page !== undefined) {
-    query.set("page", String(params.page));
-  }
-
-  if (params.limit !== undefined) {
-    query.set("limit", String(params.limit));
-  }
-
-  if (params.search?.trim()) {
-    query.set("search", params.search.trim());
-  }
-
-  if (params.role && params.role !== "ALL") {
-    query.set("role", params.role);
-  }
-
-  if (params.status && params.status !== "ALL") {
-    query.set("status", params.status);
-  }
-
-  const queryString = query.toString();
-  const url = `${API_URL}/users${queryString ? `?${queryString}` : ""}`;
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Accept: "application/json",
+  const { data } = await axiosInstance.get<PaginatedUsers>("/users", {
+    params: {
+      page: params.page,
+      limit: params.limit,
+      search: params.search?.trim() || undefined,
+      role: params.role !== "ALL" ? params.role : undefined,
+      status: params.status !== "ALL" ? params.status : undefined,
     },
-    credentials: "include",
   });
 
-  if (!response.ok) {
-    throw new Error(`Cannot fetch users (${response.status})`);
-  }
-
-  return (await response.json()) as PaginatedUsers;
+  return data;
 }

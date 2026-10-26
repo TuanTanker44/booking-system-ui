@@ -1,43 +1,75 @@
 import axiosInstance from "../lib/axios";
 import type { AuthResponse, LoginDto, RegisterDto } from "../types/auth";
-import type { User } from "../types/user";
+import type { User, UserRole, UserStatus } from "../types/user";
+
+// Dữ liệu backend trả về (snake_case, enum chữ thường)
+interface ApiUser {
+  id: number;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  role: "admin" | "laundry_staff" | "shipper" | "customer";
+  status: "active" | "inactive" | "banned";
+  created_at: string;
+}
+
+const ROLE_MAP: Record<ApiUser["role"], UserRole> = {
+  admin: "ADMIN",
+  laundry_staff: "STAFF",
+  shipper: "SHIPPER",
+  customer: "CUSTOMER",
+};
+
+const STATUS_MAP: Record<ApiUser["status"], UserStatus> = {
+  active: "ACTIVE",
+  inactive: "INACTIVE",
+  banned: "BANNED",
+};
+
+function toUser(apiUser: ApiUser): User {
+  return {
+    id: apiUser.id,
+    fullName: apiUser.full_name,
+    email: apiUser.email,
+    phone: apiUser.phone ?? "",
+    role: ROLE_MAP[apiUser.role],
+    status: STATUS_MAP[apiUser.status],
+    createdAt: apiUser.created_at,
+  };
+}
+
+interface ApiTokenResponse {
+  access_token: string;
+}
 
 export const AuthService = {
   async login(dto: LoginDto): Promise<AuthResponse> {
-    const { data } = await axiosInstance.post<AuthResponse>(
+    const { data } = await axiosInstance.post<ApiTokenResponse>(
       "/auth/login",
       dto,
     );
-    return data;
+    return { accessToken: data.access_token };
   },
 
-  async register(dto: RegisterDto): Promise<AuthResponse> {
-    const { data } = await axiosInstance.post<AuthResponse>(
-      "/auth/register",
-      dto,
-    );
-    return data;
+  // Register chỉ tạo tài khoản, không trả token
+  async register(dto: RegisterDto): Promise<void> {
+    await axiosInstance.post("/auth/register", dto);
   },
 
   async getMe(): Promise<User> {
-    const { data } = await axiosInstance.get<User>("/users/me");
-    return data;
+    const { data } = await axiosInstance.get<ApiUser>("/users/me");
+    return toUser(data);
   },
 
+  // Refresh token nằm trong cookie httpOnly, backend tự đọc từ cookie
   async refresh(): Promise<AuthResponse> {
-    const { data } = await axiosInstance.post<AuthResponse>(
+    const { data } = await axiosInstance.post<ApiTokenResponse>(
       "/auth/refresh",
-      {
-        body: {
-          refreshToken: localStorage.getItem("refreshToken"),
-        }
-      }
     );
-
-    return data;
+    return { accessToken: data.access_token };
   },
 
   async logout(): Promise<void> {
     await axiosInstance.post("/auth/logout");
   },
-}
+};

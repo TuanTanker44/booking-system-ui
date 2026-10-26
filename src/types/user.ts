@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'STAFF' | 'CUSTOMER';
+export type UserRole = 'ADMIN' | 'STAFF' | 'SHIPPER' | 'CUSTOMER';
 
 export type UserStatus = "ACTIVE" | "INACTIVE" | "BANNED" | "PENDING";
 
