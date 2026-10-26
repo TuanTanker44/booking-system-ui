@@ -262,7 +262,7 @@ export default function UserManagementPage() {
                     setSearch(event.target.value);
                     setPage(1);
                   }}
-                  placeholder="Tìm theo tên, email, số điện thoại..."
+                  placeholder="Tìm kiếm theo tên, email, số điện thoại..."
                   className="w-full rounded-lg border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 />
               </div>

@@ -92,6 +92,47 @@ export function CustomerDashboardPage() {
     notify("Đặt lịch thành công! Đơn hàng đang chờ xác nhận.");
   };
 
+  // Dữ liệu cho ô tìm kiếm: tên, địa chỉ, mô tả, số điện thoại
+  const searchEntries = useMemo<SearchEntry[]>(() => [
+    ...services.map(service => ({
+      id: `service-${service.id}`, type: "service" as const, title: service.name,
+      subtitle: `${formatMoney(service.price)}/${service.unit}`,
+      fields: [{ label: "Mô tả", value: service.description }],
+    })),
+    ...addresses.map(item => ({
+      id: `address-${item.id}`, type: "address" as const, title: `${item.title} · ${item.recipient}`, subtitle: item.address,
+      fields: [{ label: "Địa chỉ", value: item.address }, { label: "SĐT", value: item.phone, kind: "phone" as const }],
+    })),
+    ...orders.map(order => ({
+      id: `order-${order.code}`, type: "order" as const, title: `Đơn ${order.code}`, subtitle: `${order.service} · ${order.status}`,
+      fields: [{ label: "Dịch vụ", value: order.service }, { label: "Cửa hàng", value: order.store }, { label: "Mã đơn", value: order.code }],
+    })),
+  ], [addresses, orders]);
+  // Chọn cửa hàng từ kết quả API: thêm vào danh sách (nếu chưa có) rồi mở đặt lịch
+  const selectApiStore = (store: ApiStore) => {
+    setStores(current => current.some(item => item.id === store.id) ? current : [{
+      id: store.id, name: store.name, address: store.address, phone: store.phone ?? "",
+      distance: store.distance_km != null ? `${String(store.distance_km).replace(".", ",")} km` : undefined,
+    }, ...current]);
+    setSelectedStore(store.id);
+    setBookingStep(1);
+    navigate("booking");
+  };
+  const selectSearchEntry = (entry: SearchEntry, store?: ApiStore) => {
+    const key = entry.id.slice(entry.id.indexOf("-") + 1);
+    if (entry.type === "store") {
+      if (store) selectApiStore(store);
+    } else if (entry.type === "service") {
+      navigate("booking");
+      if (!quantities[Number(key)]) changeQuantity(Number(key), 1);
+    } else if (entry.type === "address") {
+      navigate("addresses");
+    } else {
+      navigate("orders");
+      setActiveOrder(key);
+    }
+  };
+
   const navItems: { id: Page; label: string; icon: React.ReactNode }[] = [
     { id: "home", label: "Trang chủ", icon: <Home /> },
     { id: "booking", label: "Đặt lịch giặt", icon: <CalendarDays /> },
@@ -134,6 +175,7 @@ export function CustomerDashboardPage() {
         <header className="topbar">
           <button className="icon-button menu-trigger" onClick={() => setMobileMenu(true)} aria-label="Mở menu"><Menu /></button>
           <div className="breadcrumb"><span>Khách hàng</span><ChevronRight size={14} /><strong>{navItems.find(item => item.id === page)?.label || "Trang chủ"}</strong></div>
+          <GlobalSearch entries={searchEntries} onSelect={selectSearchEntry} />
           <div className="topbar-actions">
             <button className="icon-button notification-button" aria-label="Thông báo" onClick={() => notify("Bạn đã xem các thông báo mới nhất.")}><Bell /><i /></button>
             <div className="topbar-divider" />
