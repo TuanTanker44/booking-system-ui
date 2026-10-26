@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { LocateFixed, MapPin } from "lucide-react";
+import { getErrorMessage } from "../../lib/error";
 import { getCurrentCoordinates, reverseGeocode } from "../../lib/location";
 import "./LocationPermissionDialog.css";
 
-const DISMISSED_KEY = "locationPromptDismissed";
+// Lưu trong bộ nhớ (không dùng sessionStorage) để mỗi lần tải lại trang đều hỏi lại,
+// nhưng chuyển trang trong ứng dụng rồi quay lại thì không hỏi lặp.
+let promptHandled = false;
+let cachedAddress = "";
 
 interface Props {
   onAddressDetected: (address: string) => void;
@@ -22,15 +26,22 @@ export function LocationPermissionDialog({
     const coordinates = await getCurrentCoordinates();
     const address = await reverseGeocode(coordinates);
 
+    cachedAddress = address;
     onAddressDetected(address);
   }
 
-  // Khi vào dashboard: hỏi người dùng nếu chưa cấp/từ chối quyền vị trí.
+  // Khi vào dashboard: hiện hộp thoại hỏi quyền vị trí (trừ khi đã bị chặn trong trình duyệt).
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
-      if (sessionStorage.getItem(DISMISSED_KEY)) return;
+      // Đã lấy địa chỉ trong lần tải trang này: dùng lại, không hỏi nữa
+      if (cachedAddress) {
+        onAddressDetected(cachedAddress);
+        return;
+      }
+
+      if (promptHandled) return;
 
       let state: PermissionState = "prompt";
 
@@ -43,17 +54,8 @@ export function LocationPermissionDialog({
         // Trình duyệt không hỗ trợ Permissions API: vẫn hiện hộp thoại
       }
 
+      // Đã chặn vị trí trong trình duyệt thì hộp thoại không có tác dụng
       if (cancelled || state === "denied") return;
-
-      if (state === "granted") {
-        // Đã cấp quyền từ trước: lấy vị trí luôn, không cần hỏi lại
-        try {
-          await detectAddress();
-        } catch {
-          // Bỏ qua, người dùng vẫn nhập địa chỉ thủ công được
-        }
-        return;
-      }
 
       setOpen(true);
     }
@@ -67,7 +69,7 @@ export function LocationPermissionDialog({
   }, []);
 
   function dismiss() {
-    sessionStorage.setItem(DISMISSED_KEY, "1");
+    promptHandled = true;
     setOpen(false);
   }
 
@@ -77,10 +79,12 @@ export function LocationPermissionDialog({
 
     try {
       await detectAddress();
-      sessionStorage.setItem(DISMISSED_KEY, "1");
+      promptHandled = true;
       setOpen(false);
       notify("Đã lấy vị trí hiện tại. Hãy kiểm tra địa chỉ trước khi lưu.");
     } catch (err: unknown) {
+      console.error("Không thể lấy địa chỉ từ vị trí hiện tại:", err);
+
       if (err instanceof GeolocationPositionError) {
         setError(
           err.code === err.PERMISSION_DENIED
@@ -89,9 +93,10 @@ export function LocationPermissionDialog({
         );
       } else {
         setError(
-          err instanceof Error
-            ? err.message
-            : "Không thể xác định vị trí của bạn.",
+          getErrorMessage(
+            err,
+            "Không thể xác định địa chỉ từ vị trí của bạn.",
+          ),
         );
       }
     } finally {

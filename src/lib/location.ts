@@ -1,3 +1,5 @@
+import axiosInstance from "./axios";
+
 export interface Coordinates {
   latitude: number;
   longitude: number;
@@ -23,36 +25,15 @@ export function getCurrentCoordinates(): Promise<Coordinates> {
   });
 }
 
-interface NominatimResponse {
-  display_name?: string;
-}
-
-// Reverse geocoding: tọa độ -> địa chỉ (OpenStreetMap Nominatim).
-// Có thể thay bằng endpoint Maps API của backend khi có.
+// Reverse geocoding: tọa độ -> địa chỉ, gọi qua backend (GET /maps/reverse-geocode)
 export async function reverseGeocode({
   latitude,
   longitude,
 }: Coordinates): Promise<string> {
-  const params = new URLSearchParams({
-    format: "jsonv2",
-    lat: String(latitude),
-    lon: String(longitude),
-    "accept-language": "vi",
-  });
-
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/reverse?${params}`,
+  const { data } = await axiosInstance.get<{ address: string }>(
+    "/maps/reverse-geocode",
+    { params: { lat: latitude, lng: longitude } },
   );
 
-  if (!response.ok) {
-    throw new Error("Không thể xác định địa chỉ từ vị trí hiện tại.");
-  }
-
-  const data = (await response.json()) as NominatimResponse;
-
-  if (!data.display_name) {
-    throw new Error("Không tìm thấy địa chỉ tại vị trí hiện tại.");
-  }
-
-  return data.display_name;
+  return data.address;
 }

@@ -36,6 +36,9 @@ const initialOrders = [
   { code: "LB20251013", date: "13/10/2026", store: "Clean & Go - Quận 10", service: "Giặt hấp (2 áo)", total: 120000, status: "Hoàn thành" as OrderStatus },
 ];
 
+type AddressItem = { id: string; title: string; recipient: string; phone: string; email: string; address: string; default: boolean };
+const initialAddresses: AddressItem[] = [{ id: "home", title: "Nhà riêng", recipient: "Ngô Tuấn", phone: "0912 345 678", email: "tuan.ngo@example.com", address: "123 Nguyễn Văn Cừ, Phường Nguyễn Cư Trinh, Quận 1, TP.HCM", default: true }, { id: "office", title: "Cơ quan", recipient: "Ngô Tuấn", phone: "0912 345 678", email: "tuan.ngo@example.com", address: "40B Lê Lợi, Phường Bến Nghé, Quận 1, TP.HCM", default: false }];
+
 const formatMoney = (value: number) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(value);
 const statusClass = (status: OrderStatus) => status === "Hoàn thành" ? "success" : status === "Đã hủy" ? "danger" : status === "Sẵn sàng giao" ? "purple" : "blue";
 const iconFor = (icon: Service["icon"]) => icon === "wash" ? <WashingMachine /> : icon === "shirt" ? <Shirt /> : <Sparkles />;
@@ -57,6 +60,8 @@ export function CustomerDashboardPage() {
   const [payment, setPayment] = useState("vnpay");
   const [toast, setToast] = useState("");
   const [detectedAddress, setDetectedAddress] = useState("");
+  const [addresses, setAddresses] = useState(initialAddresses);
+  const [stores, setStores] = useState(initialStores);
 
   const total = useMemo(() => services.reduce((sum, item) => sum + item.price * (quantities[item.id] || 0), 0), [quantities]);
   const filteredOrders = orders.filter(order => [order.code, order.store, order.service, order.status].some(value => value.toLowerCase().includes(search.toLowerCase())));
@@ -140,7 +145,7 @@ export function CustomerDashboardPage() {
           {page === "home" && <HomePage navigate={navigate} setSearch={setSearch} />}
           {page === "booking" && <BookingPage step={bookingStep} setStep={setBookingStep} selectedStore={selectedStore} setSelectedStore={setSelectedStore} quantities={quantities} changeQuantity={changeQuantity} total={total} pickupDate={pickupDate} setPickupDate={setPickupDate} pickupTime={pickupTime} setPickupTime={setPickupTime} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} payment={payment} setPayment={setPayment} submitBooking={submitBooking} notify={notify} />}
           {page === "orders" && <OrdersPage orders={filteredOrders} search={search} setSearch={setSearch} activeOrder={activeOrder} setActiveOrder={setActiveOrder} navigate={navigate} />}
-          {page === "addresses" && <AddressesPage notify={notify} detectedAddress={detectedAddress} />}
+          {page === "addresses" && <AddressesPage notify={notify} detectedAddress={detectedAddress} addresses={addresses} setAddresses={setAddresses} />}
           {page === "profile" && <ProfilePage notify={notify} />}
         </div>
         <footer className="footer"><span>© 2026 Laundry Booking</span><span>Giặt sạch mỗi ngày, nhẹ nhàng cuộc sống <span className="footer-heart">♥</span></span></footer>
@@ -164,7 +169,10 @@ function PageHeading({ eyebrow, title, description, action }: { eyebrow?: string
   return <div className="page-heading"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>;
 }
 
-function HomePage({ navigate, setSearch }: { navigate: (page: Page) => void; setSearch: (value: string) => void }) {
+function HomePage({ navigate, setSearch, stores, detectedAddress }: { navigate: (page: Page) => void; setSearch: (value: string) => void; stores: StoreItem[]; detectedAddress: string }) {
+  // Đã có vị trí người dùng: hiện địa chỉ thay cho ô nhập, cho phép đổi sang nhập tay
+  const [editingLocation, setEditingLocation] = useState(false);
+  const showDetected = Boolean(detectedAddress) && !editingLocation;
   return <>
     <section className="hero">
       <div className="hero-copy">
@@ -172,7 +180,7 @@ function HomePage({ navigate, setSearch }: { navigate: (page: Page) => void; set
         <h1>Giặt sạch dễ dàng,<br /><span>cuộc sống nhẹ nhàng.</span></h1>
         <p>Đặt lịch giặt online, giao nhận tận nơi. Dành thời gian cho những điều bạn yêu thích.</p>
         <div className="hero-search">
-          <MapPin size={18} /><input aria-label="Tìm địa chỉ" placeholder="Nhập khu vực hoặc địa chỉ của bạn" onChange={e => setSearch(e.target.value)} /><button onClick={() => navigate("booking")}>Đặt lịch ngay <ArrowRight size={16} /></button>
+          <MapPin size={18} />{showDetected ? <><span className="hero-location" title={detectedAddress}>{detectedAddress}</span><button type="button" className="hero-location-change" onClick={() => setEditingLocation(true)}>Thay đổi</button></> : <input aria-label="Tìm địa chỉ" placeholder="Nhập khu vực hoặc địa chỉ của bạn" defaultValue={editingLocation ? detectedAddress : ""} onChange={e => setSearch(e.target.value)} />}<button onClick={() => navigate("booking")}>Đặt lịch ngay <ArrowRight size={16} /></button>
         </div>
         <div className="hero-trust"><span><CheckCircle2 /> Đúng giờ, đúng hẹn</span><span><BadgeCheck /> Chăm sóc tận tâm</span></div>
       </div>
@@ -250,8 +258,7 @@ function OrdersPage({ orders, search, setSearch, activeOrder, setActiveOrder, na
   </>;
 }
 
-function AddressesPage({ notify, detectedAddress }: { notify: (message: string) => void; detectedAddress: string }) {
-  const [addresses, setAddresses] = useState([{ id: "home", title: "Nhà riêng", recipient: "Ngô Tuấn", phone: "0912 345 678", email: "tuan.ngo@example.com", address: "123 Nguyễn Văn Cừ, Phường Nguyễn Cư Trinh, Quận 1, TP.HCM", default: true }, { id: "office", title: "Cơ quan", recipient: "Ngô Tuấn", phone: "0912 345 678", email: "tuan.ngo@example.com", address: "40B Lê Lợi, Phường Bến Nghé, Quận 1, TP.HCM", default: false }]);
+function AddressesPage({ notify, detectedAddress, addresses, setAddresses }: { notify: (message: string) => void; detectedAddress: string; addresses: AddressItem[]; setAddresses: React.Dispatch<React.SetStateAction<AddressItem[]>> }) {
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("Nhà riêng");
   const [recipient, setRecipient] = useState("Ngô Tuấn");
