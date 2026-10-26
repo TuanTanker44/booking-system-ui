@@ -1,11 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { getCurrentUser, hasAccessToken } from '../app/auth';
 import { ForbiddenPage } from '../pages/common/ForbiddenPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { NotFoundPage } from '../pages/common/NotFoundPage';
 import UserManagementPage from '../pages/admin/UserManagementPage';
 import HomePage from '../pages/common/HomePage';
-import { ProtectedRoute } from './guards';
+import { ProtectedRoute, PublicRoute } from './guards';
 import { CustomerDashboardPage } from '../pages/customer/CustomerDashboardPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
 import { StaffDashboardPage } from '../pages/staff/StaffDashboardPage';
@@ -28,23 +27,15 @@ export function AppRouter() {
         <Route path="/customer/*" element={<Navigate to="/customer/dashboard" replace />} />
       </Route>
       
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route element={<PublicRoute />}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+      </Route>
+      
       <Route path="/home" element={<HomePage />} />
       <Route path="/forbidden" element={<ForbiddenPage />} />
-      {/* <Route path="/" element={<HomeRedirect />} /> */}
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
-}
-
-function HomeRedirect() {
-  const user = getCurrentUser();
-
-  if (!hasAccessToken() || !user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <Navigate to={`/${user.role.toLowerCase()}`} replace />;
 }
