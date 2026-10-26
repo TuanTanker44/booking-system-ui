@@ -1,0 +1,77 @@
+.location-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(23, 55, 93, 0.45);
+}
+
+.location-dialog {
+  width: min(420px, 100%);
+  padding: 28px 26px 22px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 20px 50px rgba(23, 55, 93, 0.25);
+  text-align: center;
+}
+
+.location-dialog-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  color: #1d4ed8;
+  background: #e8f1ff;
+}
+
+.location-dialog-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.location-dialog h2 {
+  margin: 0 0 8px;
+  color: #172b4d;
+  font-size: 18px;
+}
+
+.location-dialog p {
+  margin: 0;
+  color: #5b6b83;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.location-dialog .location-dialog-error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #b91c1c;
+  background: #fef2f2;
+  font-size: 12.5px;
+}
+
+.location-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.location-dialog-actions button {
+  flex: 1;
+  min-height: 42px;
+  font-size: 13px;
+}
+
+.location-dialog-actions button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}

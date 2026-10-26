@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { LocationPermissionDialog } from "../../components/customer/LocationPermissionDialog";
 import {
   MapPin, Home, CalendarDays, Package, MapPinned, UserRound, Settings,
   Search, Bell, ChevronDown, ChevronRight, Plus, Clock3, Star, Truck,
@@ -48,6 +49,7 @@ export function CustomerDashboardPage() {
   const [selectedAddress, setSelectedAddress] = useState("home");
   const [payment, setPayment] = useState("vnpay");
   const [toast, setToast] = useState("");
+  const [detectedAddress, setDetectedAddress] = useState("");
 
   const total = useMemo(() => services.reduce((sum, item) => sum + item.price * (quantities[item.id] || 0), 0), [quantities]);
   const filteredOrders = orders.filter(order => [order.code, order.store, order.service, order.status].some(value => value.toLowerCase().includes(search.toLowerCase())));
@@ -131,7 +133,7 @@ export function CustomerDashboardPage() {
           {page === "home" && <HomePage navigate={navigate} setSearch={setSearch} />}
           {page === "booking" && <BookingPage step={bookingStep} setStep={setBookingStep} selectedStore={selectedStore} setSelectedStore={setSelectedStore} quantities={quantities} changeQuantity={changeQuantity} total={total} pickupDate={pickupDate} setPickupDate={setPickupDate} pickupTime={pickupTime} setPickupTime={setPickupTime} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} payment={payment} setPayment={setPayment} submitBooking={submitBooking} notify={notify} />}
           {page === "orders" && <OrdersPage orders={filteredOrders} search={search} setSearch={setSearch} activeOrder={activeOrder} setActiveOrder={setActiveOrder} navigate={navigate} />}
-          {page === "addresses" && <AddressesPage notify={notify} />}
+          {page === "addresses" && <AddressesPage notify={notify} detectedAddress={detectedAddress} />}
           {page === "profile" && <ProfilePage notify={notify} />}
         </div>
         <footer className="footer"><span>© 2026 Laundry Booking</span><span>Giặt sạch mỗi ngày, nhẹ nhàng cuộc sống <span className="footer-heart">♥</span></span></footer>
@@ -145,6 +147,7 @@ export function CustomerDashboardPage() {
           { id: "profile" as Page, label: "Tài khoản", icon: <UserRound /> },
         ].map(item => <button key={item.id} className={page === item.id ? "active" : ""} onClick={() => navigate(item.id)}>{item.icon}<span>{item.label}</span></button>)}
       </nav>
+      <LocationPermissionDialog onAddressDetected={setDetectedAddress} notify={notify} />
       {toast && <div className="toast"><CheckCircle2 size={18} />{toast}</div>}
     </div>
   );
@@ -240,14 +243,16 @@ function OrdersPage({ orders, search, setSearch, activeOrder, setActiveOrder, na
   </>;
 }
 
-function AddressesPage({ notify }: { notify: (message: string) => void }) {
+function AddressesPage({ notify, detectedAddress }: { notify: (message: string) => void; detectedAddress: string }) {
   const [addresses, setAddresses] = useState([{ id: "home", title: "Nhà riêng", recipient: "Ngô Tuấn", phone: "0912 345 678", email: "tuan.ngo@example.com", address: "123 Nguyễn Văn Cừ, Phường Nguyễn Cư Trinh, Quận 1, TP.HCM", default: true }, { id: "office", title: "Cơ quan", recipient: "Ngô Tuấn", phone: "0912 345 678", email: "tuan.ngo@example.com", address: "40B Lê Lợi, Phường Bến Nghé, Quận 1, TP.HCM", default: false }]);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("Nhà riêng");
   const [recipient, setRecipient] = useState("Ngô Tuấn");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [address, setAddress] = useState("");
+  // Địa chỉ điền sẵn từ vị trí hiện tại cho tới khi người dùng tự nhập
+  const [typedAddress, setAddress] = useState<string | null>(null);
+  const address = typedAddress ?? detectedAddress;
   const save = () => {
     if (!recipient.trim() || !phone.trim() || !email.trim() || !address.trim()) { notify("Vui lòng nhập đầy đủ thông tin địa chỉ."); return; }
     setAddresses(current => [...current, { id: `address-${Date.now()}`, title, recipient, phone, email, address, default: current.length === 0 }]);

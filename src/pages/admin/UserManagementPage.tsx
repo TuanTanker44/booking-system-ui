@@ -81,6 +81,7 @@ const initialUsers: User[] = [
 const roleLabels: Record<UserRole, string> = {
   ADMIN: "Admin",
   STAFF: "Nhân viên",
+  SHIPPER: "Shipper",
   CUSTOMER: "Khách hàng",
 };
 
