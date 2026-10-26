@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LocationPermissionDialog } from "../../components/customer/LocationPermissionDialog";
 import { Avatar } from "../../components/common/Avatar";
 import { useUserStore } from "../../stores/user.js";
 import { GlobalSearch } from "../../components/customer/GlobalSearch";
 import type { SearchEntry } from "../../lib/search";
-import type { ApiStore } from "../../services/store";
+import { getTopSellingStores, getTopSellingStoresByArea, type ApiStore, type TopSellingStore } from "../../services/store";
+import { parseCurrentLocation } from "../../lib/location";
 import {
   MapPin, Home, CalendarDays, Package, MapPinned, UserRound, Settings,
   Search, Bell, ChevronDown, ChevronRight, Plus, Clock3, Star, Truck,
@@ -24,11 +25,11 @@ const services: Service[] = [
   { id: 4, name: "Đồ dễ giặt đặc biệt", description: "Giày, thú bông và đồ khác", price: 20000, unit: "món", icon: "sparkles" },
 ];
 
-const stores = [
-  { id: 1, name: "Laundry Center - Quận 1", distance: "2,3 km", time: "7 phút", rating: 4.8, reviews: 120, address: "25 Nguyễn Huệ, Quận 1" },
-  { id: 2, name: "Fresh Laundry - Quận 3", distance: "3,1 km", time: "10 phút", rating: 4.7, reviews: 89, address: "18 Võ Văn Tần, Quận 3" },
-  { id: 3, name: "Clean & Go - Quận 10", distance: "4,5 km", time: "12 phút", rating: 4.6, reviews: 76, address: "220 Sư Vạn Hạnh, Quận 10" },
-];
+type StoreItem = { id: number; phone: string; name: string; distance?: string; time?: string; rating?: number; reviews?: number; completedBookings?: number; address: string };
+
+const toStoreItem = (store: TopSellingStore): StoreItem => ({
+  id: store.id, name: store.name, address: store.address, phone: store.phone ?? "", completedBookings: store.completedBookings,
+});
 
 const initialOrders = [
   { code: "LB20251015", date: "15/10/2026", store: "Laundry Center - Quận 1", service: "Giặt theo kg (5 kg)", total: 95000, status: "Đang giặt" as OrderStatus },
@@ -60,8 +61,35 @@ export function CustomerDashboardPage() {
   const [payment, setPayment] = useState("vnpay");
   const [toast, setToast] = useState("");
   const [detectedAddress, setDetectedAddress] = useState("");
+  // currentLocation { ward, district, city } suy ra từ detectedAddress
+  const currentLocation = useMemo(() => detectedAddress ? parseCurrentLocation(detectedAddress) : null, [detectedAddress]);
   const [addresses, setAddresses] = useState(initialAddresses);
-  const [stores, setStores] = useState(initialStores);
+  const [stores, setStores] = useState<StoreItem[]>([]);
+  const [storesStatus, setStoresStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  // Cửa hàng bán chạy: theo khu vực nếu đã có vị trí, ngược lại lấy danh sách chung
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadStores() {
+      try {
+        let result = currentLocation && currentLocation.city
+          ? await getTopSellingStoresByArea(currentLocation, controller.signal)
+          : [];
+
+        // Chưa có vị trí, hoặc khu vực đó chưa có cửa hàng: dùng danh sách bán chạy chung
+        if (result.length === 0) result = await getTopSellingStores(controller.signal);
+
+        setStores(result.map(toStoreItem));
+        setStoresStatus("ready");
+      } catch {
+        if (!controller.signal.aborted) setStoresStatus("error");
+      }
+    }
+
+    void loadStores();
+    return () => controller.abort();
+  }, [currentLocation]);
 
   const total = useMemo(() => services.reduce((sum, item) => sum + item.price * (quantities[item.id] || 0), 0), [quantities]);
   const filteredOrders = orders.filter(order => [order.code, order.store, order.service, order.status].some(value => value.toLowerCase().includes(search.toLowerCase())));
@@ -80,7 +108,7 @@ export function CustomerDashboardPage() {
     const newOrder = {
       code: `LB${Date.now().toString().slice(-8)}`,
       date: new Date().toLocaleDateString("vi-VN"),
-      store: stores.find(store => store.id === selectedStore)?.name || stores[0].name,
+      store: stores.find(store => store.id === selectedStore)?.name || stores[0]?.name || "",
       service: services.filter(service => quantities[service.id] > 0).map(service => `${service.name} (${quantities[service.id]} ${service.unit})`).join(", "),
       total: total + Math.round(total * 0.1),
       status: "Đang xác nhận" as OrderStatus,
@@ -184,8 +212,8 @@ export function CustomerDashboardPage() {
         </header>
 
         <div className="page-content">
-          {page === "home" && <HomePage navigate={navigate} setSearch={setSearch} />}
-          {page === "booking" && <BookingPage step={bookingStep} setStep={setBookingStep} selectedStore={selectedStore} setSelectedStore={setSelectedStore} quantities={quantities} changeQuantity={changeQuantity} total={total} pickupDate={pickupDate} setPickupDate={setPickupDate} pickupTime={pickupTime} setPickupTime={setPickupTime} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} payment={payment} setPayment={setPayment} submitBooking={submitBooking} notify={notify} />}
+          {page === "home" && <HomePage navigate={navigate} setSearch={setSearch} stores={stores} storesStatus={storesStatus} detectedAddress={detectedAddress} />}
+          {page === "booking" && <BookingPage stores={stores} step={bookingStep} setStep={setBookingStep} selectedStore={selectedStore} setSelectedStore={setSelectedStore} quantities={quantities} changeQuantity={changeQuantity} total={total} pickupDate={pickupDate} setPickupDate={setPickupDate} pickupTime={pickupTime} setPickupTime={setPickupTime} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} payment={payment} setPayment={setPayment} submitBooking={submitBooking} notify={notify} />}
           {page === "orders" && <OrdersPage orders={filteredOrders} search={search} setSearch={setSearch} activeOrder={activeOrder} setActiveOrder={setActiveOrder} navigate={navigate} />}
           {page === "addresses" && <AddressesPage notify={notify} detectedAddress={detectedAddress} addresses={addresses} setAddresses={setAddresses} />}
           {page === "profile" && <ProfilePage notify={notify} />}
@@ -211,7 +239,7 @@ function PageHeading({ eyebrow, title, description, action }: { eyebrow?: string
   return <div className="page-heading"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>;
 }
 
-function HomePage({ navigate, setSearch, stores, detectedAddress }: { navigate: (page: Page) => void; setSearch: (value: string) => void; stores: StoreItem[]; detectedAddress: string }) {
+function HomePage({ navigate, setSearch, stores, storesStatus, detectedAddress }: { navigate: (page: Page) => void; setSearch: (value: string) => void; stores: StoreItem[]; storesStatus: "loading" | "ready" | "error"; detectedAddress: string }) {
   // Đã có vị trí người dùng: hiện địa chỉ thay cho ô nhập, cho phép đổi sang nhập tay
   const [editingLocation, setEditingLocation] = useState(false);
   const showDetected = Boolean(detectedAddress) && !editingLocation;
@@ -248,7 +276,8 @@ function HomePage({ navigate, setSearch, stores, detectedAddress }: { navigate: 
 
     <section className="section-block store-section">
       <div className="section-title"><div><span className="eyebrow">GẦN BẠN</span><h2>Cửa hàng được yêu thích</h2><p>Chọn cửa hàng phù hợp với lịch trình của bạn.</p></div><button className="text-link" onClick={() => navigate("booking")}>Xem tất cả <ArrowRight size={16} /></button></div>
-      <div className="store-grid">{stores.map((store, i) => <div className="store-card" key={store.id}><div className={`store-thumb store-thumb-${i + 1}`}><div className="store-building"><span /><span /><span /><span /></div><span className="store-open"><i /> Đang mở cửa</span></div><div className="store-info"><div className="store-name-row"><h3>{store.name}</h3><span className="rating"><Star size={13} fill="currentColor" /> {store.rating}</span></div><p><MapPin size={14} /> {store.address}</p><div className="store-meta"><span><Truck size={14} /> {store.distance}</span><span><Clock3 size={14} /> {store.time}</span><span>({store.reviews} đánh giá)</span></div><button className="outline-button" onClick={() => navigate("booking")}>Chọn cửa hàng <ArrowRight size={15} /></button></div></div>)}</div>
+      {stores.length === 0 && <div className="empty-state"><WashingMachine /><strong>{storesStatus === "loading" ? "Đang tải cửa hàng..." : storesStatus === "error" ? "Không thể tải danh sách cửa hàng" : "Chưa có cửa hàng nào"}</strong></div>}
+      <div className="store-grid">{stores.map((store, i) => <div className="store-card" key={store.id}><div className={`store-thumb store-thumb-${(i % 3) + 1}`}><div className="store-building"><span /><span /><span /><span /></div><span className="store-open"><i /> Đang mở cửa</span></div><div className="store-info"><div className="store-name-row"><h3>{store.name}</h3>{store.rating !== undefined && <span className="rating"><Star size={13} fill="currentColor" /> {store.rating}</span>}</div><p><MapPin size={14} /> {store.address}</p><div className="store-meta">{store.distance && <span><Truck size={14} /> {store.distance}</span>}{store.time && <span><Clock3 size={14} /> {store.time}</span>}{store.reviews !== undefined && <span>({store.reviews} đánh giá)</span>}{store.completedBookings !== undefined && <span>{store.completedBookings} đơn hoàn thành</span>}</div><button className="outline-button" onClick={() => navigate("booking")}>Chọn cửa hàng <ArrowRight size={15} /></button></div></div>)}</div>
     </section>
 
     <section className="bottom-cta"><div className="cta-spark cta-spark-one">✦</div><div className="cta-copy"><span className="eyebrow">BẮT ĐẦU NGAY HÔM NAY</span><h2>Để việc giặt giũ cho chúng tôi.</h2><p>Đặt lịch chỉ trong vài phút, nhận quần áo sạch thơm ngay tại nhà.</p><button className="white-button" onClick={() => navigate("booking")}>Đặt lịch giặt ngay <ArrowRight size={16} /></button></div><div className="cta-illustration"><div className="cta-shirt"><Shirt /></div><div className="cta-basket"><span /><span /><span /></div><div className="cta-spark cta-spark-two">✦</div></div></section>
@@ -256,13 +285,14 @@ function HomePage({ navigate, setSearch, stores, detectedAddress }: { navigate: 
 }
 
 function BookingPage(props: {
+  stores: StoreItem[];
   step: number; setStep: (step: number) => void; selectedStore: number; setSelectedStore: (id: number) => void;
   quantities: Record<number, number>; changeQuantity: (id: number, delta: number) => void; total: number;
   pickupDate: string; setPickupDate: (date: string) => void; pickupTime: string; setPickupTime: (time: string) => void;
   selectedAddress: string; setSelectedAddress: (address: string) => void; payment: string; setPayment: (payment: string) => void;
   submitBooking: () => void; notify: (message: string) => void;
 }) {
-  const { step, setStep, selectedStore, setSelectedStore, quantities, changeQuantity, total, pickupDate, setPickupDate, pickupTime, setPickupTime, selectedAddress, setSelectedAddress, payment, setPayment, submitBooking, notify } = props;
+  const { stores, step, setStep, selectedStore, setSelectedStore, quantities, changeQuantity, total, pickupDate, setPickupDate, pickupTime, setPickupTime, selectedAddress, setSelectedAddress, payment, setPayment, submitBooking, notify } = props;
   const [storeQuery, setStoreQuery] = useState("");
   const selectedStoreData = stores.find(store => store.id === selectedStore) || stores[0];
   const hasServices = Object.values(quantities).some(value => value > 0);
@@ -274,15 +304,15 @@ function BookingPage(props: {
 
         {step === 1 && <>
           <div className="panel"><div className="panel-heading"><div><h2><MapPin /> Chọn cửa hàng</h2><p>Chọn cửa hàng thuận tiện cho việc lấy đồ.</p></div><span className="optional-tag">Bắt buộc</span></div><div className="input-with-icon store-search"><Search /><input value={storeQuery} onChange={e => setStoreQuery(e.target.value)} placeholder="Tìm cửa hàng hoặc khu vực..." /></div>
-            <div className="booking-store-list">{stores.filter(store => store.name.toLowerCase().includes(storeQuery.toLowerCase()) || store.address.toLowerCase().includes(storeQuery.toLowerCase())).map(store => <button key={store.id} className={`booking-store ${selectedStore === store.id ? "selected" : ""}`} onClick={() => setSelectedStore(store.id)}><span className="radio-dot">{selectedStore === store.id && <i />}</span><span className="store-mini-icon"><WashingMachine /></span><span className="booking-store-details"><strong>{store.name}</strong><small><MapPin size={12} /> {store.address}</small><small><Truck size={12} /> {store.distance} · khoảng {store.time}</small></span><span className="booking-store-rating"><Star size={13} fill="currentColor" /> {store.rating}</span></button>)}</div>
+            <div className="booking-store-list">{stores.filter(store => store.name.toLowerCase().includes(storeQuery.toLowerCase()) || store.address.toLowerCase().includes(storeQuery.toLowerCase())).map(store => <button key={store.id} className={`booking-store ${selectedStore === store.id ? "selected" : ""}`} onClick={() => setSelectedStore(store.id)}><span className="radio-dot">{selectedStore === store.id && <i />}</span><span className="store-mini-icon"><WashingMachine /></span><span className="booking-store-details"><strong>{store.name}</strong><small><MapPin size={12} /> {store.address}</small>{store.distance && <small><Truck size={12} /> {store.distance}{store.time ? ` · khoảng ${store.time}` : ""}</small>}</span>{store.rating !== undefined && <span className="booking-store-rating"><Star size={13} fill="currentColor" /> {store.rating}</span>}</button>)}</div>
           </div>
           <div className="panel"><div className="panel-heading"><div><h2><WashingMachine /> Chọn dịch vụ</h2><p>Chọn số lượng tương ứng với đồ cần giặt.</p></div></div><div className="booking-service-list">{services.map(service => <div className="booking-service" key={service.id}><span className={`booking-service-icon service-icon-${service.id}`}>{iconFor(service.icon)}</span><div className="booking-service-info"><strong>{service.name}</strong><small>{service.description}</small><span>{formatMoney(service.price)} / {service.unit}</span></div><div className="quantity-control"><button aria-label="Giảm số lượng" onClick={() => changeQuantity(service.id, -1)} disabled={!quantities[service.id]}><Minus size={14} /></button><span>{quantities[service.id] || 0}</span><button aria-label="Tăng số lượng" onClick={() => changeQuantity(service.id, 1)}><Plus size={14} /></button></div></div>)}</div></div>
         </>}
         {step === 2 && <div className="panel"><div className="panel-heading"><div><h2><CalendarDays /> Thời gian lấy đồ</h2><p>Chọn ngày và khung giờ phù hợp.</p></div></div><div className="form-grid"><label className="field-label">Ngày lấy đồ<input type="date" min={new Date().toISOString().slice(0, 10)} value={pickupDate} onChange={e => setPickupDate(e.target.value)} /></label><label className="field-label">Khung giờ<select value={pickupTime} onChange={e => setPickupTime(e.target.value)}><option>09:00 - 11:00</option><option>11:00 - 13:00</option><option>14:00 - 16:00</option><option>17:00 - 19:00</option></select></label></div><div className="panel-heading address-heading"><div><h2><MapPinned /> Địa chỉ giao nhận</h2><p>Shipper sẽ đến lấy đồ và giao lại tại địa chỉ này.</p></div><button className="text-link" onClick={() => notify("Chức năng thêm địa chỉ mới sẽ kết nối API.")}><Plus size={15} /> Thêm địa chỉ</button></div><div className="address-options"><button className={`address-option ${selectedAddress === "home" ? "selected" : ""}`} onClick={() => setSelectedAddress("home")}><span className="radio-dot">{selectedAddress === "home" && <i />}</span><Home /><span><strong>Nhà riêng</strong><small>Ngô Tuấn · 0912 345 678</small><small>123 Nguyễn Văn Cừ, Quận 1, TP.HCM</small></span><span className="default-tag">Mặc định</span></button><button className={`address-option ${selectedAddress === "office" ? "selected" : ""}`} onClick={() => setSelectedAddress("office")}><span className="radio-dot">{selectedAddress === "office" && <i />}</span><MapPin /><span><strong>Cơ quan</strong><small>Ngô Tuấn · 0912 345 678</small><small>40B Lê Lợi, Quận 3, TP.HCM</small></span></button></div><label className="field-label note-field">Ghi chú cho shipper (không bắt buộc)<textarea placeholder="Ví dụ: gọi điện trước khi đến, giao tại sảnh..." rows={3} /></label></div>}
-        {step === 3 && <div className="panel"><div className="panel-heading"><div><h2><CreditCard /> Phương thức thanh toán</h2><p>Chọn cách thanh toán tiền cọc và phần còn lại.</p></div></div><div className="payment-options">{[{id:"vnpay",title:"VNPay",desc:"Quét mã QR hoặc ứng dụng ngân hàng",icon:"V"},{id:"momo",title:"Ví MoMo",desc:"Thanh toán nhanh qua ví điện tử",icon:"M"},{id:"cash",title:"Tiền mặt",desc:"Thanh toán với nhân viên giao nhận",icon:"₫"}].map(item => <button key={item.id} className={`payment-option ${payment === item.id ? "selected" : ""}`} onClick={() => setPayment(item.id)}><span className={`payment-logo payment-${item.id}`}>{item.icon}</span><span><strong>{item.title}</strong><small>{item.desc}</small></span><span className="radio-dot">{payment === item.id && <i />}</span></button>)}</div><div className="deposit-note"><WalletCards /><div><strong>Thanh toán tiền cọc</strong><p>Tiền cọc dự kiến là 20% giá trị đơn hàng. Cửa hàng sẽ xác nhận giá cuối cùng sau khi cân/kiểm tra đồ.</p></div></div><div className="booking-review"><h3>Thông tin đặt lịch</h3><div><span>Cửa hàng</span><strong>{selectedStoreData.name}</strong></div><div><span>Ngày lấy đồ</span><strong>{pickupDate} · {pickupTime}</strong></div><div><span>Địa chỉ</span><strong>{selectedAddress === "home" ? "Nhà riêng, 123 Nguyễn Văn Cừ" : "Cơ quan, 40B Lê Lợi"}</strong></div></div></div>}
+        {step === 3 && <div className="panel"><div className="panel-heading"><div><h2><CreditCard /> Phương thức thanh toán</h2><p>Chọn cách thanh toán tiền cọc và phần còn lại.</p></div></div><div className="payment-options">{[{id:"vnpay",title:"VNPay",desc:"Quét mã QR hoặc ứng dụng ngân hàng",icon:"V"},{id:"momo",title:"Ví MoMo",desc:"Thanh toán nhanh qua ví điện tử",icon:"M"},{id:"cash",title:"Tiền mặt",desc:"Thanh toán với nhân viên giao nhận",icon:"₫"}].map(item => <button key={item.id} className={`payment-option ${payment === item.id ? "selected" : ""}`} onClick={() => setPayment(item.id)}><span className={`payment-logo payment-${item.id}`}>{item.icon}</span><span><strong>{item.title}</strong><small>{item.desc}</small></span><span className="radio-dot">{payment === item.id && <i />}</span></button>)}</div><div className="deposit-note"><WalletCards /><div><strong>Thanh toán tiền cọc</strong><p>Tiền cọc dự kiến là 20% giá trị đơn hàng. Cửa hàng sẽ xác nhận giá cuối cùng sau khi cân/kiểm tra đồ.</p></div></div><div className="booking-review"><h3>Thông tin đặt lịch</h3><div><span>Cửa hàng</span><strong>{selectedStoreData?.name ?? "Chưa chọn cửa hàng"}</strong></div><div><span>Ngày lấy đồ</span><strong>{pickupDate} · {pickupTime}</strong></div><div><span>Địa chỉ</span><strong>{selectedAddress === "home" ? "Nhà riêng, 123 Nguyễn Văn Cừ" : "Cơ quan, 40B Lê Lợi"}</strong></div></div></div>}
         <div className="booking-actions">{step > 1 ? <button className="outline-button" onClick={() => setStep(step - 1)}>Quay lại</button> : <span className="booking-hint"><CheckCircle2 size={15} /> Không mất phí khi đặt lịch</span>}{step < 3 ? <button className="primary-button" disabled={step === 1 && !hasServices} onClick={() => setStep(step + 1)}>Tiếp tục <ArrowRight size={16} /></button> : <button className="primary-button" onClick={submitBooking}><CheckCircle2 size={17} /> Xác nhận đặt lịch</button>}</div>
       </div>
-      <aside className="booking-summary"><div className="summary-title"><h3>Tóm tắt đơn hàng</h3><span className="summary-bag"><Package /></span></div><div className="summary-store"><span className="summary-store-icon"><WashingMachine /></span><div><strong>{selectedStoreData.name}</strong><small><MapPin size={12} /> {selectedStoreData.distance} từ vị trí của bạn</small></div></div><div className="summary-lines">{services.filter(service => quantities[service.id] > 0).map(service => <div className="summary-line" key={service.id}><span>{service.name} <small>× {quantities[service.id]}</small></span><strong>{formatMoney(service.price * quantities[service.id])}</strong></div>)}{!hasServices && <div className="empty-summary">Chọn dịch vụ để xem tạm tính.</div>}</div><div className="summary-coupon"><Tag /><input placeholder="Mã ưu đãi" /><button onClick={() => notify("Mã ưu đãi sẽ được kiểm tra khi kết nối backend.")}>Áp dụng</button></div><div className="summary-total"><span>Tạm tính</span><strong>{formatMoney(total)}</strong></div><div className="summary-total"><span>Phí giao nhận</span><strong className="free-text">{total >= 150000 ? "Miễn phí" : "15.000đ"}</strong></div><div className="summary-total"><span>Ưu đãi</span><strong className="discount-text">-{formatMoney(0)}</strong></div><div className="summary-grand"><span>Tổng tạm tính</span><strong>{formatMoney(total + (total > 0 && total < 150000 ? 15000 : 0))}</strong></div><div className="summary-footnote"><CheckCircle2 size={15} /> Giá cuối cùng được xác nhận sau khi cửa hàng kiểm tra đồ.</div><div className="summary-support"><CircleHelp /><span>Cần hỗ trợ?<strong>1900 1234</strong></span></div></aside>
+      <aside className="booking-summary"><div className="summary-title"><h3>Tóm tắt đơn hàng</h3><span className="summary-bag"><Package /></span></div><div className="summary-store"><span className="summary-store-icon"><WashingMachine /></span><div><strong>{selectedStoreData?.name ?? "Chưa chọn cửa hàng"}</strong>{selectedStoreData?.distance && <small><MapPin size={12} /> {selectedStoreData.distance} từ vị trí của bạn</small>}</div></div><div className="summary-lines">{services.filter(service => quantities[service.id] > 0).map(service => <div className="summary-line" key={service.id}><span>{service.name} <small>× {quantities[service.id]}</small></span><strong>{formatMoney(service.price * quantities[service.id])}</strong></div>)}{!hasServices && <div className="empty-summary">Chọn dịch vụ để xem tạm tính.</div>}</div><div className="summary-coupon"><Tag /><input placeholder="Mã ưu đãi" /><button onClick={() => notify("Mã ưu đãi sẽ được kiểm tra khi kết nối backend.")}>Áp dụng</button></div><div className="summary-total"><span>Tạm tính</span><strong>{formatMoney(total)}</strong></div><div className="summary-total"><span>Phí giao nhận</span><strong className="free-text">{total >= 150000 ? "Miễn phí" : "15.000đ"}</strong></div><div className="summary-total"><span>Ưu đãi</span><strong className="discount-text">-{formatMoney(0)}</strong></div><div className="summary-grand"><span>Tổng tạm tính</span><strong>{formatMoney(total + (total > 0 && total < 150000 ? 15000 : 0))}</strong></div><div className="summary-footnote"><CheckCircle2 size={15} /> Giá cuối cùng được xác nhận sau khi cửa hàng kiểm tra đồ.</div><div className="summary-support"><CircleHelp /><span>Cần hỗ trợ?<strong>1900 1234</strong></span></div></aside>
     </div>
   </>;
 }

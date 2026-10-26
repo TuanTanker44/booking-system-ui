@@ -1,4 +1,5 @@
 import axiosInstance from "../lib/axios";
+import type { CurrentLocation } from "../lib/location";
 
 export interface ApiStore {
   id: number;
@@ -41,6 +42,38 @@ export async function searchStores(
     params: { search: search?.trim() ?? "", page, limit, lat, lng },
     signal,
   });
+
+  return data;
+}
+
+// Cửa hàng bán chạy: kèm số đơn đã hoàn thành (và điểm khớp khu vực nếu lọc theo khu vực)
+export interface TopSellingStore extends Omit<ApiStore, "latitude" | "longitude"> {
+  completedBookings: number;
+  areaScore?: number;
+}
+
+// GET /stores/top-selling — dùng khi chưa có vị trí người dùng
+export async function getTopSellingStores(
+  signal?: AbortSignal,
+): Promise<TopSellingStore[]> {
+  const { data } = await axiosInstance.get<TopSellingStore[]>(
+    "/stores/top-selling",
+    { signal },
+  );
+
+  return data;
+}
+
+// POST /stores/top-selling/area — dùng khi người dùng cho phép truy cập vị trí
+export async function getTopSellingStoresByArea(
+  { ward, district, city }: CurrentLocation,
+  signal?: AbortSignal,
+): Promise<TopSellingStore[]> {
+  const { data } = await axiosInstance.post<TopSellingStore[]>(
+    "/stores/top-selling/area",
+    { ward, district, city },
+    { signal },
+  );
 
   return data;
 }
