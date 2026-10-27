@@ -63,7 +63,7 @@ export function LoginPage() {
       <section className="auth-card">
         <div className="auth-logo">
           <img className="auth-logo-icon" src="/logo.png" alt="" />
-          <span>LaundryCare</span>
+          <span>LaundryBooking</span>
         </div>
 
         <div className="auth-heading">

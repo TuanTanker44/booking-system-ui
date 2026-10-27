@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
 import { ForbiddenPage } from '../pages/common/ForbiddenPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { NotFoundPage } from '../pages/common/NotFoundPage';
@@ -7,7 +7,20 @@ import HomePage from '../pages/common/HomePage';
 import { ProtectedRoute, PublicRoute } from './guards';
 import { CustomerDashboardPage } from '../pages/customer/CustomerDashboardPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
+import { EmailVerificationPage } from "../pages/auth/EmailVerificationPage";
+import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
 import { StaffDashboardPage } from '../pages/staff/StaffDashboardPage';
+
+// Có token trên URL (link từ email) thì xác minh, không thì hiện màn nhắc kiểm tra email
+function VerifyEmailRoute() {
+  const [searchParams] = useSearchParams();
+
+  return searchParams.has("token") ? (
+    <VerifyEmailPage />
+  ) : (
+    <EmailVerificationPage />
+  );
+}
 
 export function AppRouter() {
   return (
@@ -30,8 +43,9 @@ export function AppRouter() {
       <Route element={<PublicRoute />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verify-email" element={<VerifyEmailRoute />} />
       </Route>
-      
+
       <Route path="/home" element={<HomePage />} />
       <Route path="/forbidden" element={<ForbiddenPage />} />
       <Route path="/" element={<Navigate to="/home" replace />} />

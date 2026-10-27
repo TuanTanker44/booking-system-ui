@@ -1,5 +1,5 @@
 import axiosInstance from "../lib/axios";
-import type { AuthResponse, LoginDto, RegisterDto } from "../types/auth";
+import type { AuthResponse, LoginDto, RegisterDto, ResendVerificationDto } from "../types/auth";
 import type { User, UserRole, UserStatus } from "../types/user";
 
 // Dữ liệu backend trả về (snake_case, enum chữ thường)
@@ -74,4 +74,13 @@ export const AuthService = {
   async logout(): Promise<void> {
     await axiosInstance.post("/auth/logout");
   },
+
+  // Xác minh email bằng token trong link gửi qua mail
+  async verifyEmail(token: string): Promise<void> {
+    await axiosInstance.post("/auth/verify-email", { token });
+  },
+
+  async resendVerification(dto: ResendVerificationDto): Promise<void> {
+    await axiosInstance.post("/auth/resend-verification", dto);
+  }
 };

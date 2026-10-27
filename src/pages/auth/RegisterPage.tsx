@@ -54,10 +54,12 @@ export function RegisterPage() {
         "Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.",
       );
 
-      // Chuyển sang trang đăng nhập sau khi thông báo được hiển thị.
-      window.setTimeout(() => {
-        navigate("/login", { replace: true });
-      }, 1500);
+      navigate("/verify-email", {
+        replace: true,
+        state: {
+          email: email.trim(),
+        },
+      });
     } catch (err: unknown) {
       setError(
         getErrorMessage(
@@ -79,16 +81,16 @@ export function RegisterPage() {
         <div className="auth-logo">
           <img
             src="/logo.png"
-            alt="LaundryCare Logo"
+            alt="LaundryBooking Logo"
             className="auth-logo-image"
           />
-          <span>LaundryCare</span>
+          <span>LaundryBooking</span>
         </div>
 
         <div className="auth-heading">
           <h1>Tạo tài khoản</h1>
           <p>
-            Tham gia LaundryCare để đặt lịch giặt
+            Tham gia LaundryBooking để đặt lịch giặt
             <br />
             nhanh chóng và tiện lợi.
           </p>
