@@ -876,6 +876,8 @@ svg {
   transition: 0.2s;
   box-shadow: 0 3px 12px #1a579109;
   min-width: 0;
+  position: relative;
+  overflow: hidden;
 }
 .service-card:hover,
 .store-card:hover {
@@ -884,16 +886,31 @@ svg {
   border-color: #cfe3ff;
 }
 .service-art {
-  width: 45px;
-  height: 45px;
+  position: relative;
+  overflow: hidden;
+  width: 56px;
+  height: 56px;
   display: grid;
   place-items: center;
-  border-radius: 14px;
+  border-radius: 16px;
   margin-bottom: 15px;
 }
+/* Vòng tròn mờ phía sau icon cho tile bớt trống */
+.service-art::before {
+  content: "";
+  position: absolute;
+  right: -14px;
+  bottom: -14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.12;
+}
 .service-art svg {
-  width: 23px;
-  height: 23px;
+  position: relative;
+  width: 28px;
+  height: 28px;
 }
 .art-1 {
   background: #eaf3ff;
@@ -910,6 +927,25 @@ svg {
 .art-4 {
   background: #fff0e3;
   color: #ef9d3b;
+}
+/* Icon lớn mờ ở góc phải để thẻ bớt trống */
+.service-deco {
+  position: absolute;
+  top: 8px;
+  right: -6px;
+  width: 92px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+  background: none;
+  opacity: 0.16;
+  transform: rotate(-12deg);
+  pointer-events: none;
+}
+.service-deco svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.4;
 }
 .service-card h3 {
   font-size: 12px;
@@ -1822,9 +1858,27 @@ svg {
 .field-label textarea:focus {
   border-color: #83baff;
 }
-.field-label input:disabled {
+.field-label input:disabled,
+.field-label select:disabled {
   background: #f8fafd;
   color: #6c7e95;
+}
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #536984;
+  cursor: pointer;
+}
+.checkbox-field input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563eb;
+  /* index.css bật color-scheme dark nên checkbox mặc định bị nền đen khi chưa tick */
+  color-scheme: light;
 }
 .field-span {
   grid-column: 1/-1;
@@ -3091,6 +3145,10 @@ td small.table-subtitle {
   }
   .service-art svg {
     width: 20px;
+  }
+  .service-deco {
+    width: 64px;
+    height: 64px;
   }
   .service-card h3 {
     font-size: 10px;

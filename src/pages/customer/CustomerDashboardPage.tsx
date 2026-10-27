@@ -5,24 +5,28 @@ import { useUserStore } from "../../stores/user.js";
 import { GlobalSearch } from "../../components/customer/GlobalSearch";
 import type { SearchEntry } from "../../lib/search";
 import { getTopSellingStores, getTopSellingStoresByArea, type ApiStore, type TopSellingStore } from "../../services/store";
-import { parseCurrentLocation } from "../../lib/location";
+import { getCurrentCoordinates, parseAddressParts, parseCurrentLocation, reverseGeocode } from "../../lib/location";
+import { getErrorMessage } from "../../lib/error";
+import { PICKUP_SLOTS, firstAvailableSlot, getDefaultPickup, isSlotAvailable, toLocalDateString } from "../../lib/pickup";
+import { DEFAULT_CITY, CITIES, getDistricts, getWards, matchName, stripAdminPrefix } from "../../lib/vn-address";
+import { AddressService, formatAddress, type Address, type AddressInput } from "../../services/address";
 import {
   MapPin, Home, CalendarDays, Package, MapPinned, UserRound, Settings,
   Search, Bell, ChevronDown, ChevronRight, Plus, Clock3, Star, Truck,
   CheckCircle2, WashingMachine, Shirt, Sparkles, WalletCards, Menu, X,
   ArrowRight, SlidersHorizontal, CircleHelp, LogOut, CreditCard, Check,
-  Minus, LocateFixed, Phone, Mail, Pencil, Trash2, BadgeCheck, Tag,
+  Minus, BedDouble, Footprints, LocateFixed, Phone, Pencil, Trash2, BadgeCheck, Tag,
 } from "lucide-react";
 
 type Page = "home" | "booking" | "orders" | "addresses" | "profile";
-type Service = { id: number; name: string; description: string; price: number; unit: string; icon: "wash" | "shirt" | "sparkles" };
+type Service = { id: number; name: string; description: string; price: number; unit: string; icon: "wash" | "shirt" | "bed" | "shoe" };
 type OrderStatus = "Đang xác nhận" | "Đang giặt" | "Sẵn sàng giao" | "Hoàn thành" | "Đã hủy";
 
 const services: Service[] = [
   { id: 1, name: "Giặt theo kg", description: "Giặt sấy thường ngày", price: 15000, unit: "kg", icon: "wash" },
   { id: 2, name: "Giặt hấp cao cấp", description: "Chăm sóc vải chuyên biệt", price: 35000, unit: "kg", icon: "shirt" },
-  { id: 3, name: "Giặt chăn ga gối", description: "Làm sạch sâu, khử mùi", price: 50000, unit: "món", icon: "sparkles" },
-  { id: 4, name: "Đồ dễ giặt đặc biệt", description: "Giày, thú bông và đồ khác", price: 20000, unit: "món", icon: "sparkles" },
+  { id: 3, name: "Giặt chăn ga gối", description: "Làm sạch sâu, khử mùi", price: 50000, unit: "món", icon: "bed" },
+  { id: 4, name: "Đồ dễ giặt đặc biệt", description: "Giày, thú bông và đồ khác", price: 20000, unit: "món", icon: "shoe" },
 ];
 
 type StoreItem = { id: number; phone: string; name: string; distance?: string; time?: string; rating?: number; reviews?: number; completedBookings?: number; address: string };
@@ -37,12 +41,16 @@ const initialOrders = [
   { code: "LB20251013", date: "13/10/2026", store: "Clean & Go - Quận 10", service: "Giặt hấp (2 áo)", total: 120000, status: "Hoàn thành" as OrderStatus },
 ];
 
-type AddressItem = { id: string; title: string; recipient: string; phone: string; email: string; address: string; default: boolean };
-const initialAddresses: AddressItem[] = [{ id: "home", title: "Nhà riêng", recipient: "Ngô Tuấn", phone: "0912 345 678", email: "tuan.ngo@example.com", address: "123 Nguyễn Văn Cừ, Phường Nguyễn Cư Trinh, Quận 1, TP.HCM", default: true }, { id: "office", title: "Cơ quan", recipient: "Ngô Tuấn", phone: "0912 345 678", email: "tuan.ngo@example.com", address: "40B Lê Lợi, Phường Bến Nghé, Quận 1, TP.HCM", default: false }];
 
 const formatMoney = (value: number) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(value);
 const statusClass = (status: OrderStatus) => status === "Hoàn thành" ? "success" : status === "Đã hủy" ? "danger" : status === "Sẵn sàng giao" ? "purple" : "blue";
-const iconFor = (icon: Service["icon"]) => icon === "wash" ? <WashingMachine /> : icon === "shirt" ? <Shirt /> : <Sparkles />;
+const serviceIcons: Record<Service["icon"], React.ReactNode> = {
+  wash: <WashingMachine />,
+  shirt: <Shirt />,
+  bed: <BedDouble />,
+  shoe: <Footprints />,
+};
+const iconFor = (icon: Service["icon"]) => serviceIcons[icon];
 
 export function CustomerDashboardPage() {
   const user = useUserStore((state) => state.user);
@@ -54,16 +62,45 @@ export function CustomerDashboardPage() {
   const [activeOrder, setActiveOrder] = useState<string | null>(null);
   const [bookingStep, setBookingStep] = useState(1);
   const [selectedStore, setSelectedStore] = useState(1);
-  const [quantities, setQuantities] = useState<Record<number, number>>({ 1: 3, 2: 0, 3: 0, 4: 0 });
-  const [pickupDate, setPickupDate] = useState("2026-10-16");
-  const [pickupTime, setPickupTime] = useState("09:00 - 11:00");
-  const [selectedAddress, setSelectedAddress] = useState("home");
+  const [quantities, setQuantities] = useState<Record<number, number>>({ 1: 0, 2: 0, 3: 0, 4: 0 });
+  // Mặc định: hôm nay + khung giờ hiện tại (hết giờ hôm nay thì sang ngày mai)
+  const [defaultPickup] = useState(() => getDefaultPickup());
+  const [pickupDate, setPickupDate] = useState(defaultPickup.date);
+  const [pickupTime, setPickupTime] = useState(defaultPickup.time);
+  const [selectedAddress, setSelectedAddress] = useState<number | null>(null);
   const [payment, setPayment] = useState("vnpay");
   const [toast, setToast] = useState("");
   const [detectedAddress, setDetectedAddress] = useState("");
   // currentLocation { ward, district, city } suy ra từ detectedAddress
   const currentLocation = useMemo(() => detectedAddress ? parseCurrentLocation(detectedAddress) : null, [detectedAddress]);
-  const [addresses, setAddresses] = useState(initialAddresses);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [addressesStatus, setAddressesStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  const reloadAddresses = async () => {
+    try {
+      setAddresses(await AddressService.list());
+      setAddressesStatus("ready");
+    } catch {
+      setAddressesStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    AddressService.list()
+      .then((result) => {
+        if (cancelled) return;
+        setAddresses(result);
+        setAddressesStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setAddressesStatus("error");
+      });
+
+    return () => { cancelled = true; };
+  }, []);
+
   const [stores, setStores] = useState<StoreItem[]>([]);
   const [storesStatus, setStoresStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -128,8 +165,8 @@ export function CustomerDashboardPage() {
       fields: [{ label: "Mô tả", value: service.description }],
     })),
     ...addresses.map(item => ({
-      id: `address-${item.id}`, type: "address" as const, title: `${item.title} · ${item.recipient}`, subtitle: item.address,
-      fields: [{ label: "Địa chỉ", value: item.address }, { label: "SĐT", value: item.phone, kind: "phone" as const }],
+      id: `address-${item.id}`, type: "address" as const, title: `${item.label} · ${item.recipientName}`, subtitle: formatAddress(item),
+      fields: [{ label: "Địa chỉ", value: formatAddress(item) }, { label: "SĐT", value: item.phone, kind: "phone" as const }],
     })),
     ...orders.map(order => ({
       id: `order-${order.code}`, type: "order" as const, title: `Đơn ${order.code}`, subtitle: `${order.service} · ${order.status}`,
@@ -213,9 +250,9 @@ export function CustomerDashboardPage() {
 
         <div className="page-content">
           {page === "home" && <HomePage navigate={navigate} setSearch={setSearch} stores={stores} storesStatus={storesStatus} detectedAddress={detectedAddress} />}
-          {page === "booking" && <BookingPage stores={stores} step={bookingStep} setStep={setBookingStep} selectedStore={selectedStore} setSelectedStore={setSelectedStore} quantities={quantities} changeQuantity={changeQuantity} total={total} pickupDate={pickupDate} setPickupDate={setPickupDate} pickupTime={pickupTime} setPickupTime={setPickupTime} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} payment={payment} setPayment={setPayment} submitBooking={submitBooking} notify={notify} />}
+          {page === "booking" && <BookingPage stores={stores} step={bookingStep} setStep={setBookingStep} selectedStore={selectedStore} setSelectedStore={setSelectedStore} quantities={quantities} changeQuantity={changeQuantity} total={total} pickupDate={pickupDate} setPickupDate={setPickupDate} pickupTime={pickupTime} setPickupTime={setPickupTime} addresses={addresses} addressesStatus={addressesStatus} goToAddresses={() => navigate("addresses")} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} payment={payment} setPayment={setPayment} submitBooking={submitBooking} notify={notify} />}
           {page === "orders" && <OrdersPage orders={filteredOrders} search={search} setSearch={setSearch} activeOrder={activeOrder} setActiveOrder={setActiveOrder} navigate={navigate} />}
-          {page === "addresses" && <AddressesPage notify={notify} detectedAddress={detectedAddress} addresses={addresses} setAddresses={setAddresses} />}
+          {page === "addresses" && <AddressesPage notify={notify} addresses={addresses} status={addressesStatus} reload={reloadAddresses} />}
           {page === "profile" && <ProfilePage notify={notify} />}
         </div>
         <footer className="footer"><span>© 2026 Laundry Booking</span><span>Giặt sạch mỗi ngày, nhẹ nhàng cuộc sống <span className="footer-heart">♥</span></span></footer>
@@ -271,7 +308,7 @@ function HomePage({ navigate, setSearch, stores, storesStatus, detectedAddress }
 
     <section className="section-block">
       <div className="section-title"><div><span className="eyebrow">DỊCH VỤ CỦA CHÚNG TÔI</span><h2>Chọn dịch vụ phù hợp</h2><p>Chăm sóc từng món đồ theo cách tốt nhất.</p></div><button className="text-link" onClick={() => navigate("booking")}>Tất cả dịch vụ <ArrowRight size={16} /></button></div>
-      <div className="service-grid">{services.map((service, index) => <button className="service-card" key={service.id} onClick={() => navigate("booking")}><div className={`service-art art-${index + 1}`}>{iconFor(service.icon)}</div><h3>{service.name}</h3><p>{service.description}</p><div className="service-price"><strong>{formatMoney(service.price)}</strong><span>/{service.unit}</span><ArrowRight size={16} /></div></button>)}</div>
+      <div className="service-grid">{services.map((service, index) => <button className="service-card" key={service.id} onClick={() => navigate("booking")}><div className={`service-art art-${index + 1}`}>{iconFor(service.icon)}</div><span className={`service-deco art-${index + 1}`} aria-hidden="true">{iconFor(service.icon)}</span><h3>{service.name}</h3><p>{service.description}</p><div className="service-price"><strong>{formatMoney(service.price)}</strong><span>/{service.unit}</span><ArrowRight size={16} /></div></button>)}</div>
     </section>
 
     <section className="section-block store-section">
@@ -289,10 +326,13 @@ function BookingPage(props: {
   step: number; setStep: (step: number) => void; selectedStore: number; setSelectedStore: (id: number) => void;
   quantities: Record<number, number>; changeQuantity: (id: number, delta: number) => void; total: number;
   pickupDate: string; setPickupDate: (date: string) => void; pickupTime: string; setPickupTime: (time: string) => void;
-  selectedAddress: string; setSelectedAddress: (address: string) => void; payment: string; setPayment: (payment: string) => void;
+  addresses: Address[]; addressesStatus: "loading" | "ready" | "error"; goToAddresses: () => void;
+  selectedAddress: number | null; setSelectedAddress: (id: number) => void; payment: string; setPayment: (payment: string) => void;
   submitBooking: () => void; notify: (message: string) => void;
 }) {
-  const { stores, step, setStep, selectedStore, setSelectedStore, quantities, changeQuantity, total, pickupDate, setPickupDate, pickupTime, setPickupTime, selectedAddress, setSelectedAddress, payment, setPayment, submitBooking, notify } = props;
+  const { stores, step, setStep, selectedStore, setSelectedStore, quantities, changeQuantity, total, pickupDate, setPickupDate, pickupTime, setPickupTime, addresses, addressesStatus, goToAddresses, selectedAddress, setSelectedAddress, payment, setPayment, submitBooking, notify } = props;
+  // Chưa chọn (hoặc địa chỉ đã bị xóa) thì dùng địa chỉ mặc định, không có thì địa chỉ đầu tiên
+  const activeAddress = addresses.find(item => item.id === selectedAddress) ?? addresses.find(item => item.isDefault) ?? addresses[0];
   const [storeQuery, setStoreQuery] = useState("");
   const selectedStoreData = stores.find(store => store.id === selectedStore) || stores[0];
   const hasServices = Object.values(quantities).some(value => value > 0);
@@ -308,9 +348,9 @@ function BookingPage(props: {
           </div>
           <div className="panel"><div className="panel-heading"><div><h2><WashingMachine /> Chọn dịch vụ</h2><p>Chọn số lượng tương ứng với đồ cần giặt.</p></div></div><div className="booking-service-list">{services.map(service => <div className="booking-service" key={service.id}><span className={`booking-service-icon service-icon-${service.id}`}>{iconFor(service.icon)}</span><div className="booking-service-info"><strong>{service.name}</strong><small>{service.description}</small><span>{formatMoney(service.price)} / {service.unit}</span></div><div className="quantity-control"><button aria-label="Giảm số lượng" onClick={() => changeQuantity(service.id, -1)} disabled={!quantities[service.id]}><Minus size={14} /></button><span>{quantities[service.id] || 0}</span><button aria-label="Tăng số lượng" onClick={() => changeQuantity(service.id, 1)}><Plus size={14} /></button></div></div>)}</div></div>
         </>}
-        {step === 2 && <div className="panel"><div className="panel-heading"><div><h2><CalendarDays /> Thời gian lấy đồ</h2><p>Chọn ngày và khung giờ phù hợp.</p></div></div><div className="form-grid"><label className="field-label">Ngày lấy đồ<input type="date" min={new Date().toISOString().slice(0, 10)} value={pickupDate} onChange={e => setPickupDate(e.target.value)} /></label><label className="field-label">Khung giờ<select value={pickupTime} onChange={e => setPickupTime(e.target.value)}><option>09:00 - 11:00</option><option>11:00 - 13:00</option><option>14:00 - 16:00</option><option>17:00 - 19:00</option></select></label></div><div className="panel-heading address-heading"><div><h2><MapPinned /> Địa chỉ giao nhận</h2><p>Shipper sẽ đến lấy đồ và giao lại tại địa chỉ này.</p></div><button className="text-link" onClick={() => notify("Chức năng thêm địa chỉ mới sẽ kết nối API.")}><Plus size={15} /> Thêm địa chỉ</button></div><div className="address-options"><button className={`address-option ${selectedAddress === "home" ? "selected" : ""}`} onClick={() => setSelectedAddress("home")}><span className="radio-dot">{selectedAddress === "home" && <i />}</span><Home /><span><strong>Nhà riêng</strong><small>Ngô Tuấn · 0912 345 678</small><small>123 Nguyễn Văn Cừ, Quận 1, TP.HCM</small></span><span className="default-tag">Mặc định</span></button><button className={`address-option ${selectedAddress === "office" ? "selected" : ""}`} onClick={() => setSelectedAddress("office")}><span className="radio-dot">{selectedAddress === "office" && <i />}</span><MapPin /><span><strong>Cơ quan</strong><small>Ngô Tuấn · 0912 345 678</small><small>40B Lê Lợi, Quận 3, TP.HCM</small></span></button></div><label className="field-label note-field">Ghi chú cho shipper (không bắt buộc)<textarea placeholder="Ví dụ: gọi điện trước khi đến, giao tại sảnh..." rows={3} /></label></div>}
-        {step === 3 && <div className="panel"><div className="panel-heading"><div><h2><CreditCard /> Phương thức thanh toán</h2><p>Chọn cách thanh toán tiền cọc và phần còn lại.</p></div></div><div className="payment-options">{[{id:"vnpay",title:"VNPay",desc:"Quét mã QR hoặc ứng dụng ngân hàng",icon:"V"},{id:"momo",title:"Ví MoMo",desc:"Thanh toán nhanh qua ví điện tử",icon:"M"},{id:"cash",title:"Tiền mặt",desc:"Thanh toán với nhân viên giao nhận",icon:"₫"}].map(item => <button key={item.id} className={`payment-option ${payment === item.id ? "selected" : ""}`} onClick={() => setPayment(item.id)}><span className={`payment-logo payment-${item.id}`}>{item.icon}</span><span><strong>{item.title}</strong><small>{item.desc}</small></span><span className="radio-dot">{payment === item.id && <i />}</span></button>)}</div><div className="deposit-note"><WalletCards /><div><strong>Thanh toán tiền cọc</strong><p>Tiền cọc dự kiến là 20% giá trị đơn hàng. Cửa hàng sẽ xác nhận giá cuối cùng sau khi cân/kiểm tra đồ.</p></div></div><div className="booking-review"><h3>Thông tin đặt lịch</h3><div><span>Cửa hàng</span><strong>{selectedStoreData?.name ?? "Chưa chọn cửa hàng"}</strong></div><div><span>Ngày lấy đồ</span><strong>{pickupDate} · {pickupTime}</strong></div><div><span>Địa chỉ</span><strong>{selectedAddress === "home" ? "Nhà riêng, 123 Nguyễn Văn Cừ" : "Cơ quan, 40B Lê Lợi"}</strong></div></div></div>}
-        <div className="booking-actions">{step > 1 ? <button className="outline-button" onClick={() => setStep(step - 1)}>Quay lại</button> : <span className="booking-hint"><CheckCircle2 size={15} /> Không mất phí khi đặt lịch</span>}{step < 3 ? <button className="primary-button" disabled={step === 1 && !hasServices} onClick={() => setStep(step + 1)}>Tiếp tục <ArrowRight size={16} /></button> : <button className="primary-button" onClick={submitBooking}><CheckCircle2 size={17} /> Xác nhận đặt lịch</button>}</div>
+        {step === 2 && <div className="panel"><div className="panel-heading"><div><h2><CalendarDays /> Thời gian lấy đồ</h2><p>Chọn ngày và khung giờ phù hợp.</p></div></div><div className="form-grid"><label className="field-label">Ngày lấy đồ<input type="date" min={toLocalDateString(new Date())} value={pickupDate} onChange={e => { const date = e.target.value; setPickupDate(date); if (!isSlotAvailable(date, pickupTime)) { const slot = firstAvailableSlot(date); if (slot) setPickupTime(slot); } }} /></label><label className="field-label">Khung giờ<select value={pickupTime} onChange={e => setPickupTime(e.target.value)}>{PICKUP_SLOTS.map(slot => <option key={slot.label} value={slot.label} disabled={!isSlotAvailable(pickupDate, slot.label)}>{slot.label}</option>)}</select>{!firstAvailableSlot(pickupDate) && <small>Hôm nay đã hết khung giờ, vui lòng chọn ngày khác.</small>}</label></div><div className="panel-heading address-heading"><div><h2><MapPinned /> Địa chỉ giao nhận</h2><p>Shipper sẽ đến lấy đồ và giao lại tại địa chỉ này.</p></div><button className="text-link" onClick={goToAddresses}><Plus size={15} /> Thêm địa chỉ</button></div>{addressesStatus === "loading" && <p className="empty-summary">Đang tải địa chỉ...</p>}{addressesStatus === "error" && <p className="empty-summary">Không thể tải danh sách địa chỉ.</p>}{addressesStatus === "ready" && addresses.length === 0 && <p className="empty-summary">Bạn chưa có địa chỉ nào. Hãy thêm địa chỉ để tiếp tục đặt lịch.</p>}<div className="address-options">{addresses.map(item => <button key={item.id} className={`address-option ${activeAddress?.id === item.id ? "selected" : ""}`} onClick={() => setSelectedAddress(item.id)}><span className="radio-dot">{activeAddress?.id === item.id && <i />}</span>{item.label === "Nhà riêng" ? <Home /> : <MapPin />}<span><strong>{item.label}</strong><small>{item.recipientName} · {item.phone}</small><small>{formatAddress(item)}</small></span>{item.isDefault && <span className="default-tag">Mặc định</span>}</button>)}</div><label className="field-label note-field">Ghi chú cho shipper (không bắt buộc)<textarea placeholder="Ví dụ: gọi điện trước khi đến, giao tại sảnh..." rows={3} /></label></div>}
+        {step === 3 && <div className="panel"><div className="panel-heading"><div><h2><CreditCard /> Phương thức thanh toán</h2><p>Chọn cách thanh toán tiền cọc và phần còn lại.</p></div></div><div className="payment-options">{[{id:"vnpay",title:"VNPay",desc:"Quét mã QR hoặc ứng dụng ngân hàng",icon:"V"},{id:"momo",title:"Ví MoMo",desc:"Thanh toán nhanh qua ví điện tử",icon:"M"},{id:"cash",title:"Tiền mặt",desc:"Thanh toán với nhân viên giao nhận",icon:"₫"}].map(item => <button key={item.id} className={`payment-option ${payment === item.id ? "selected" : ""}`} onClick={() => setPayment(item.id)}><span className={`payment-logo payment-${item.id}`}>{item.icon}</span><span><strong>{item.title}</strong><small>{item.desc}</small></span><span className="radio-dot">{payment === item.id && <i />}</span></button>)}</div><div className="deposit-note"><WalletCards /><div><strong>Thanh toán tiền cọc</strong><p>Tiền cọc dự kiến là 20% giá trị đơn hàng. Cửa hàng sẽ xác nhận giá cuối cùng sau khi cân/kiểm tra đồ.</p></div></div><div className="booking-review"><h3>Thông tin đặt lịch</h3><div><span>Cửa hàng</span><strong>{selectedStoreData?.name ?? "Chưa chọn cửa hàng"}</strong></div><div><span>Ngày lấy đồ</span><strong>{pickupDate} · {pickupTime}</strong></div><div><span>Địa chỉ</span><strong>{activeAddress ? `${activeAddress.label}, ${formatAddress(activeAddress)}` : "Chưa chọn địa chỉ"}</strong></div></div></div>}
+        <div className="booking-actions">{step > 1 ? <button className="outline-button" onClick={() => setStep(step - 1)}>Quay lại</button> : <span className="booking-hint"><CheckCircle2 size={15} /> Không mất phí khi đặt lịch</span>}{step < 3 ? <button className="primary-button" disabled={(step === 1 && !hasServices) || (step === 2 && (!activeAddress || !isSlotAvailable(pickupDate, pickupTime)))} onClick={() => setStep(step + 1)}>Tiếp tục <ArrowRight size={16} /></button> : <button className="primary-button" onClick={submitBooking}><CheckCircle2 size={17} /> Xác nhận đặt lịch</button>}</div>
       </div>
       <aside className="booking-summary"><div className="summary-title"><h3>Tóm tắt đơn hàng</h3><span className="summary-bag"><Package /></span></div><div className="summary-store"><span className="summary-store-icon"><WashingMachine /></span><div><strong>{selectedStoreData?.name ?? "Chưa chọn cửa hàng"}</strong>{selectedStoreData?.distance && <small><MapPin size={12} /> {selectedStoreData.distance} từ vị trí của bạn</small>}</div></div><div className="summary-lines">{services.filter(service => quantities[service.id] > 0).map(service => <div className="summary-line" key={service.id}><span>{service.name} <small>× {quantities[service.id]}</small></span><strong>{formatMoney(service.price * quantities[service.id])}</strong></div>)}{!hasServices && <div className="empty-summary">Chọn dịch vụ để xem tạm tính.</div>}</div><div className="summary-coupon"><Tag /><input placeholder="Mã ưu đãi" /><button onClick={() => notify("Mã ưu đãi sẽ được kiểm tra khi kết nối backend.")}>Áp dụng</button></div><div className="summary-total"><span>Tạm tính</span><strong>{formatMoney(total)}</strong></div><div className="summary-total"><span>Phí giao nhận</span><strong className="free-text">{total >= 150000 ? "Miễn phí" : "15.000đ"}</strong></div><div className="summary-total"><span>Ưu đãi</span><strong className="discount-text">-{formatMoney(0)}</strong></div><div className="summary-grand"><span>Tổng tạm tính</span><strong>{formatMoney(total + (total > 0 && total < 150000 ? 15000 : 0))}</strong></div><div className="summary-footnote"><CheckCircle2 size={15} /> Giá cuối cùng được xác nhận sau khi cửa hàng kiểm tra đồ.</div><div className="summary-support"><CircleHelp /><span>Cần hỗ trợ?<strong>1900 1234</strong></span></div></aside>
     </div>
@@ -330,26 +370,106 @@ function OrdersPage({ orders, search, setSearch, activeOrder, setActiveOrder, na
   </>;
 }
 
-function AddressesPage({ notify, detectedAddress, addresses, setAddresses }: { notify: (message: string) => void; detectedAddress: string; addresses: AddressItem[]; setAddresses: React.Dispatch<React.SetStateAction<AddressItem[]>> }) {
+function AddressSelect({ value, options, placeholder, disabled, onChange }: { value: string; options: string[]; placeholder: string; disabled?: boolean; onChange: (value: string) => void }) {
+  // Giữ giá trị đang có (vd. địa chỉ cũ không nằm trong danh mục) để không bị mất khi mở form sửa
+  const items = value && !options.includes(value) ? [value, ...options] : options;
+  return <select value={value} disabled={disabled} onChange={e => onChange(e.target.value)}><option value="">{placeholder}</option>{items.map(item => <option key={item} value={item}>{item}</option>)}</select>;
+}
+
+type AddressFormState = { label: string; recipientName: string; phone: string; addressLine: string; ward: string; district: string; city: string; latitude: number | null; longitude: number | null; isDefault: boolean };
+const emptyAddressForm: AddressFormState = { label: "Nhà riêng", recipientName: "", phone: "", addressLine: "", ward: "", district: "", city: DEFAULT_CITY, latitude: null, longitude: null, isDefault: false };
+
+function AddressesPage({ notify, addresses, status, reload }: { notify: (message: string) => void; addresses: Address[]; status: "loading" | "ready" | "error"; reload: () => Promise<void> }) {
+  const user = useUserStore((state) => state.user);
   const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState("Nhà riêng");
-  const [recipient, setRecipient] = useState("Ngô Tuấn");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  // Địa chỉ điền sẵn từ vị trí hiện tại cho tới khi người dùng tự nhập
-  const [typedAddress, setAddress] = useState<string | null>(null);
-  const address = typedAddress ?? detectedAddress;
-  const save = () => {
-    if (!recipient.trim() || !phone.trim() || !email.trim() || !address.trim()) { notify("Vui lòng nhập đầy đủ thông tin địa chỉ."); return; }
-    setAddresses(current => [...current, { id: `address-${Date.now()}`, title, recipient, phone, email, address, default: current.length === 0 }]);
-    setShowForm(false); setPhone(""); setEmail(""); setAddress(""); notify("Đã thêm địa chỉ mới.");
+  // null: đang thêm mới, số: đang sửa địa chỉ có id tương ứng
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState<AddressFormState>(emptyAddressForm);
+  const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const setField = <K extends keyof AddressFormState>(key: K, value: AddressFormState[K]) => setForm(current => ({ ...current, [key]: value }));
+
+  const openCreate = () => {
+    setEditingId(null);
+    // Địa chỉ đầu tiên tự là mặc định
+    setForm({ ...emptyAddressForm, recipientName: user?.fullName ?? "", phone: user?.phone ?? "", isDefault: addresses.length === 0 });
+    setShowForm(true);
   };
+  const openEdit = (item: Address) => {
+    setEditingId(item.id);
+    setForm({ label: item.label, recipientName: item.recipientName, phone: item.phone, addressLine: item.addressLine, ward: item.ward, district: item.district, city: item.city, latitude: item.latitude, longitude: item.longitude, isDefault: item.isDefault });
+    setShowForm(true);
+  };
+  const closeForm = () => setShowForm(false);
+  const districts = getDistricts(form.city);
+  const wards = getWards(form.city, form.district);
+  const changeCity = (city: string) => setForm(current => ({ ...current, city, district: "", ward: "" }));
+  const changeDistrict = (district: string) => setForm(current => ({ ...current, district, ward: "" }));
+
+  // Điền địa chỉ + tọa độ từ vị trí hiện tại của thiết bị
+  const useCurrentLocation = async () => {
+    setLocating(true);
+    try {
+      const coordinates = await getCurrentCoordinates();
+      const parts = parseAddressParts(await reverseGeocode(coordinates));
+      // Ưu tiên tên chuẩn trong danh mục; không khớp thì vẫn điền giá trị định vị để người dùng tự sửa
+      const city = matchName([...CITIES], parts?.city ?? "") || stripAdminPrefix(parts?.city ?? "") || DEFAULT_CITY;
+      const district = matchName(getDistricts(city), parts?.district ?? "") || stripAdminPrefix(parts?.district ?? "");
+      const ward = matchName(getWards(city, district), parts?.ward ?? "") || stripAdminPrefix(parts?.ward ?? "");
+      setForm(current => ({ ...current, ...coordinates, addressLine: parts?.addressLine ?? current.addressLine, city, district, ward }));
+      notify(parts ? "Đã điền địa chỉ từ vị trí hiện tại." : "Đã lấy tọa độ, vui lòng nhập địa chỉ.");
+    } catch {
+      notify("Không thể lấy vị trí hiện tại. Vui lòng kiểm tra quyền truy cập vị trí.");
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const save = async () => {
+    const input: AddressInput = { ...form, recipientName: form.recipientName.trim(), phone: form.phone.trim(), addressLine: form.addressLine.trim(), ward: form.ward.trim(), district: form.district.trim(), city: form.city.trim() };
+    if (!input.recipientName || !input.phone || !input.addressLine || !input.ward || !input.district || !input.city) { notify("Vui lòng nhập đầy đủ thông tin địa chỉ."); return; }
+    if (input.phone.replace(/\D/g, "").length < 9) { notify("Số điện thoại không hợp lệ."); return; }
+
+    setSaving(true);
+    try {
+      if (editingId === null) await AddressService.create(input);
+      else await AddressService.update(editingId, input);
+      await reload();
+      setShowForm(false);
+      notify(editingId === null ? "Đã thêm địa chỉ mới." : "Đã cập nhật địa chỉ.");
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, "Không thể lưu địa chỉ. Vui lòng thử lại."));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async (item: Address) => {
+    try {
+      await AddressService.remove(item.id);
+      await reload();
+      notify("Đã xóa địa chỉ.");
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, "Không thể xóa địa chỉ. Vui lòng thử lại."));
+    }
+  };
+  const makeDefault = async (item: Address) => {
+    try {
+      await AddressService.setDefault(item.id);
+      await reload();
+      notify("Đã đặt địa chỉ mặc định.");
+    } catch (err: unknown) {
+      notify(getErrorMessage(err, "Không thể đặt địa chỉ mặc định. Vui lòng thử lại."));
+    }
+  };
+
   return <>
-    <PageHeading eyebrow="SỔ ĐỊA CHỈ" title="Địa chỉ của tôi" description="Quản lý địa chỉ lấy và giao đồ giặt của bạn." action={<button className="primary-button" onClick={() => setShowForm(!showForm)}><Plus size={17} /> Thêm địa chỉ</button>} />
-    {showForm && <div className="panel address-form"><div className="panel-heading"><div><h2><MapPinned /> Thêm địa chỉ mới</h2><p>Thông tin này sẽ được dùng khi đặt lịch lấy và giao đồ.</p></div><button className="icon-button" onClick={() => setShowForm(false)} aria-label="Đóng"><X /></button></div><div className="form-grid"><label className="field-label">Tên địa chỉ<select value={title} onChange={e => setTitle(e.target.value)}><option>Nhà riêng</option><option>Cơ quan</option><option>Khác</option></select></label><label className="field-label">Người nhận<input value={recipient} onChange={e => setRecipient(e.target.value)} placeholder="Họ và tên người nhận" /></label><label className="field-label">Số điện thoại<input value={phone} onChange={e => setPhone(e.target.value)} placeholder="09xx xxx xxx" /></label><label className="field-label">Email<input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" /></label><label className="field-label field-span">Địa chỉ chi tiết<input value={address} onChange={e => setAddress(e.target.value)} placeholder="Số nhà, đường, phường/xã, quận/huyện..." /></label></div><div className="form-actions"><button className="outline-button" onClick={() => setShowForm(false)}>Hủy</button><button className="primary-button" onClick={save}><Check size={16} /> Lưu địa chỉ</button></div></div>}
-    <div className="address-page-grid">{addresses.map(item => <div className="panel address-card" key={item.id}><div className="address-card-top"><span className="address-large-icon">{item.title === "Nhà riêng" ? <Home /> : <MapPin />}</span><div className="address-title"><h3>{item.title}</h3>{item.default && <span className="default-tag">Mặc định</span>}</div><button className="icon-button" aria-label="Tùy chọn địa chỉ" onClick={() => notify("Các thao tác địa chỉ sẽ kết nối API.")}>•••</button></div><div className="address-recipient"><strong>{item.recipient}</strong><span><Phone size={14} /> {item.phone}</span><span><Mail size={14} /> {item.email}</span></div><p className="address-full"><MapPin size={15} />{item.address}</p><div className="address-card-actions"><button onClick={() => notify("Chức năng chỉnh sửa địa chỉ sẽ kết nối API.")}><Pencil size={15} /> Chỉnh sửa</button><button onClick={() => setAddresses(current => current.filter(a => a.id !== item.id))}><Trash2 size={15} /> Xóa</button>{!item.default && <button onClick={() => setAddresses(current => current.map(a => ({ ...a, default: a.id === item.id })))}><CheckCircle2 size={15} /> Đặt mặc định</button>}</div></div>)}
-      <button className="add-address-card" onClick={() => setShowForm(true)}><span><Plus /></span><strong>Thêm địa chỉ mới</strong><small>Lưu địa chỉ để đặt lịch nhanh hơn</small></button></div>
-    <div className="address-tip"><LocateFixed /><div><strong>Mẹo nhỏ</strong><p>Hãy nhập địa chỉ càng chi tiết càng tốt để shipper tìm bạn nhanh hơn. Tích hợp bản đồ sẽ hỗ trợ định vị chính xác hơn.</p></div></div>
+    <PageHeading eyebrow="SỔ ĐỊA CHỈ" title="Địa chỉ của tôi" description="Quản lý địa chỉ lấy và giao đồ giặt của bạn." action={<button className="primary-button" onClick={openCreate}><Plus size={17} /> Thêm địa chỉ</button>} />
+    {showForm && <div className="panel address-form"><div className="panel-heading"><div><h2><MapPinned /> {editingId === null ? "Thêm địa chỉ mới" : "Chỉnh sửa địa chỉ"}</h2><p>Thông tin này sẽ được dùng khi đặt lịch lấy và giao đồ.</p></div><button className="icon-button" onClick={closeForm} aria-label="Đóng"><X /></button></div><div className="form-grid"><label className="field-label">Tên địa chỉ<select value={form.label} onChange={e => setField("label", e.target.value)}><option>Nhà riêng</option><option>Cơ quan</option><option>Khác</option></select></label><label className="field-label">Người nhận<input value={form.recipientName} onChange={e => setField("recipientName", e.target.value)} placeholder="Họ và tên người nhận" /></label><label className="field-label">Số điện thoại<input type="tel" value={form.phone} onChange={e => setField("phone", e.target.value)} placeholder="09xx xxx xxx" /></label><label className="field-label field-span">Số nhà, tên đường<input value={form.addressLine} onChange={e => setField("addressLine", e.target.value)} placeholder="Ví dụ: Số 123, đường Xuân Thủy" /></label><label className="field-label">Tỉnh/Thành phố<AddressSelect value={form.city} options={[...CITIES]} placeholder="Chọn tỉnh/thành phố" onChange={changeCity} /></label><label className="field-label">Quận/Huyện<AddressSelect value={form.district} options={districts} placeholder="Chọn quận/huyện" disabled={!form.city} onChange={changeDistrict} /></label><label className="field-label">Phường/Xã{wards.length > 0 || !form.district ? <AddressSelect value={form.ward} options={wards} placeholder="Chọn phường/xã" disabled={!form.district} onChange={ward => setField("ward", ward)} /> : <input value={form.ward} onChange={e => setField("ward", e.target.value)} placeholder="Nhập phường/xã" />}</label><div className="field-label"><span>Vị trí trên bản đồ</span><button type="button" className="outline-button" onClick={useCurrentLocation} disabled={locating}><LocateFixed size={16} /> {locating ? "Đang định vị..." : form.latitude !== null ? "Cập nhật vị trí hiện tại" : "Dùng vị trí hiện tại"}</button>{form.latitude !== null && form.longitude !== null && <small>{form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}</small>}</div><label className="field-span checkbox-field"><input type="checkbox" checked={form.isDefault} onChange={e => setField("isDefault", e.target.checked)} /> Đặt làm địa chỉ mặc định</label></div><div className="form-actions"><button className="outline-button" onClick={closeForm} disabled={saving}>Hủy</button><button className="primary-button" onClick={save} disabled={saving}><Check size={16} /> {saving ? "Đang lưu..." : "Lưu địa chỉ"}</button></div></div>}
+    {status === "loading" && <p>Đang tải địa chỉ...</p>}
+    {status === "error" && <p>Không thể tải danh sách địa chỉ. <button className="outline-button" onClick={() => void reload()}>Thử lại</button></p>}
+    <div className="address-page-grid">{addresses.map(item => <div className="panel address-card" key={item.id}><div className="address-card-top"><span className="address-large-icon">{item.label === "Nhà riêng" ? <Home /> : <MapPin />}</span><div className="address-title"><h3>{item.label}</h3>{item.isDefault && <span className="default-tag">Mặc định</span>}</div></div><div className="address-recipient"><strong>{item.recipientName}</strong><span><Phone size={14} /> {item.phone}</span></div><p className="address-full"><MapPin size={15} />{formatAddress(item)}</p><div className="address-card-actions"><button onClick={() => openEdit(item)}><Pencil size={15} /> Chỉnh sửa</button><button onClick={() => void remove(item)}><Trash2 size={15} /> Xóa</button>{!item.isDefault && <button onClick={() => void makeDefault(item)}><CheckCircle2 size={15} /> Đặt mặc định</button>}</div></div>)}
+      <button className="add-address-card" onClick={openCreate}><span><Plus /></span><strong>Thêm địa chỉ mới</strong><small>Lưu địa chỉ để đặt lịch nhanh hơn</small></button></div>
+    <div className="address-tip"><LocateFixed /><div><strong>Mẹo nhỏ</strong><p>Hãy nhập địa chỉ càng chi tiết càng tốt để shipper tìm bạn nhanh hơn. Bấm "Dùng vị trí hiện tại" để lưu tọa độ chính xác hơn.</p></div></div>
   </>;
 }
 

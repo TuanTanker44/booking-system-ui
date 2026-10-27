@@ -76,3 +76,29 @@ export function parseCurrentLocation(address: string): CurrentLocation | null {
 
   return { ward, district, city };
 }
+
+export interface AddressParts extends CurrentLocation {
+  addressLine: string;
+}
+
+// Như parseCurrentLocation nhưng kèm phần số nhà/đường (address_line) còn lại phía trước.
+export function parseAddressParts(address: string): AddressParts | null {
+  const location = parseCurrentLocation(address);
+  if (!location) return null;
+
+  const addressLine = address
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .filter((segment) => !/^(việt nam|vietnam)$/i.test(segment))
+    .filter((segment) => !/^\d{4,6}$/.test(segment))
+    .filter(
+      (segment) =>
+        segment !== location.ward &&
+        segment !== location.district &&
+        segment !== location.city,
+    )
+    .join(", ");
+
+  return { addressLine, ...location };
+}
