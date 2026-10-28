@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate as useRouterNavigate } from "react-router-dom";
 import { LocationPermissionDialog } from "../../components/customer/LocationPermissionDialog";
 import { Avatar } from "../../components/common/Avatar";
 import { useUserStore } from "../../stores/user.js";
@@ -54,6 +55,7 @@ const serviceIcons: Record<Service["icon"], React.ReactNode> = {
 const iconFor = (icon: Service["icon"]) => serviceIcons[icon];
 
 export function CustomerDashboardPage() {
+  const navigateRoute = useRouterNavigate();
   const user = useUserStore((state) => state.user);
   const displayName = user?.fullName || user?.email || "Khách hàng";
   const [page, setPage] = useState<Page>("home");
@@ -361,7 +363,7 @@ export function CustomerDashboardPage() {
           <div className="promo-bubbles" />
         </div>
         <div className="sidebar-bottom">
-          <button className="nav-item" onClick={() => notify("Trung tâm hỗ trợ sẽ sớm kết nối.")}><CircleHelp /><span>Trợ giúp & hỗ trợ</span></button>
+          <button className="nav-item" onClick={() => navigateRoute("/help")}><CircleHelp /><span>Trợ giúp & hỗ trợ</span></button>
           <div className="sidebar-user"><Avatar className="avatar" name={displayName} src={user?.avatarUrl} /><div><strong>{displayName}</strong><small>Khách hàng</small></div><ChevronDown size={16} /></div>
         </div>
       </aside>
@@ -613,7 +615,7 @@ function ProfilePage({ notify }: { notify: (message: string) => void }) {
   const [editing, setEditing] = useState(false);
   return <>
     <PageHeading eyebrow="TÀI KHOẢN CỦA BẠN" title="Thông tin cá nhân" description="Cập nhật thông tin để chúng tôi phục vụ bạn tốt hơn." />
-    <div className="profile-layout"><aside className="panel profile-menu"><div className="profile-identity"><Avatar className="profile-avatar" name={name || displayName} src={user?.avatarUrl} /><h3>{name}</h3><p>Thành viên từ tháng 08/2026</p><span className="member-chip"><BadgeCheck size={14} /> Tài khoản đã xác thực</span></div><div className="profile-menu-list"><button className="active"><UserRound /> Thông tin cá nhân <ChevronRight /></button><button onClick={() => notify("Chức năng đổi mật khẩu sẽ kết nối API.")}><Settings /> Đổi mật khẩu <ChevronRight /></button><button onClick={() => notify("Bạn chưa có đánh giá mới.")}><Star /> Đánh giá của tôi <ChevronRight /></button><button onClick={() => notify("Trung tâm khiếu nại sẽ sớm kết nối.")}><CircleHelp /> Hỗ trợ & khiếu nại <ChevronRight /></button></div><button className="logout-button" onClick={() => notify("Chức năng đăng xuất sẽ kết nối Auth API.")}><LogOut /> Đăng xuất</button></aside>
+    <div className="profile-layout"><aside className="panel profile-menu"><div className="profile-identity"><Avatar className="profile-avatar" name={name || displayName} src={user?.avatarUrl} /><h3>{name}</h3><p>Thành viên từ tháng 08/2026</p><span className="member-chip"><BadgeCheck size={14} /> Tài khoản đã xác thực</span></div><div className="profile-menu-list"><button className="active"><UserRound /> Thông tin cá nhân <ChevronRight /></button><button onClick={() => notify("Chức năng đổi mật khẩu sẽ kết nối API.")}><Settings /> Đổi mật khẩu <ChevronRight /></button><button onClick={() => notify("Bạn chưa có đánh giá mới.")}><Star /> Đánh giá của tôi <ChevronRight /></button><button onClick={() => navigateRoute("/help")}><CircleHelp /> Hỗ trợ & khiếu nại <ChevronRight /></button></div><button className="logout-button" onClick={() => notify("Chức năng đăng xuất sẽ kết nối Auth API.")}><LogOut /> Đăng xuất</button></aside>
       <div className="panel profile-form-panel"><div className="panel-heading"><div><h2>Thông tin cơ bản</h2><p>Thông tin cá nhân của bạn được bảo mật.</p></div><button className="outline-button" onClick={() => editing ? (setEditing(false), notify("Đã lưu thông tin (bản demo).")) : setEditing(true)}>{editing ? <><Check size={15} /> Lưu thay đổi</> : <><Pencil size={15} /> Chỉnh sửa</>}</button></div><div className="profile-form"><label className="field-label">Họ và tên<input disabled={!editing} value={name} onChange={e => setName(e.target.value)} /></label><label className="field-label">Địa chỉ email<input disabled={!editing} type="email" value={email} onChange={e => setEmail(e.target.value)} /></label><label className="field-label">Số điện thoại<input disabled={!editing} value={phone} onChange={e => setPhone(e.target.value)} /></label><label className="field-label">Ngày sinh<input disabled={!editing} type="date" defaultValue="2003-08-15" /></label><label className="field-label field-span">Địa chỉ mặc định<input disabled value="123 Nguyễn Văn Cừ, Quận 1, TP.HCM" /></label></div><div className="profile-security"><span><BadgeCheck /></span><div><strong>Bảo mật tài khoản</strong><p>Email và số điện thoại giúp bạn nhận thông báo về lịch lấy đồ, giao đồ và cập nhật đơn hàng.</p></div><button className="text-link" onClick={() => notify("Chức năng bảo mật sẽ kết nối Auth API.")}>Thiết lập <ArrowRight size={14} /></button></div></div>
     </div>
   </>;
