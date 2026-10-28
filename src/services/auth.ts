@@ -19,6 +19,8 @@ function toUser(apiUser: ApiUser): User {
   return {
     id: apiUser.id,
     fullName: apiUser.full_name,
+    // input[type=date] chỉ nhận YYYY-MM-DD nên cắt phần giờ nếu backend trả ISO datetime
+    dateOfBirth: apiUser.date_of_birth?.slice(0, 10) ?? "",
     avatarUrl: apiUser.avatar_url,
     email: apiUser.email,
     phone: apiUser.phone ?? "",

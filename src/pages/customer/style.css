@@ -2675,6 +2675,171 @@ td small.table-subtitle {
 .profile-form {
   gap: 19px;
 }
+/* Form đổi mật khẩu */
+.password-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+  align-items: start;
+}
+.password-form {
+  display: grid;
+  gap: 16px;
+}
+.password-aside {
+  display: grid;
+  gap: 14px;
+}
+.password-aside-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: #f6f9fd;
+  border-radius: 10px;
+}
+.password-aside-card > strong {
+  font-size: 10px;
+  color: #34506f;
+}
+.password-tips {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  background: #f2f8ff;
+}
+.password-tips > span {
+  flex: none;
+  width: 35px;
+  height: 35px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #e0efff;
+  color: #0878f9;
+}
+.password-tips strong {
+  font-size: 10px;
+  color: #34506f;
+}
+.password-tips p {
+  font-size: 9px;
+  color: #8798af;
+  line-height: 1.6;
+  margin: 5px 0 0;
+}
+.password-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.password-input > svg {
+  position: absolute;
+  left: 12px;
+  color: #8798af;
+  pointer-events: none;
+}
+.password-input input {
+  width: 100%;
+  padding-left: 36px;
+  padding-right: 38px;
+}
+.password-input button {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8798af;
+  cursor: pointer;
+}
+.password-input button:hover {
+  background: #eaf3ff;
+  color: #0878f9;
+}
+.password-strength {
+  display: grid;
+  gap: 6px;
+}
+.password-strength-bar {
+  height: 5px;
+  border-radius: 5px;
+  background: #e8eef6;
+  overflow: hidden;
+}
+.password-strength-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  width: 0;
+  transition: width 0.25s, background 0.25s;
+}
+.password-strength-bar .level-1 { width: 33%; background: #e66d62; }
+.password-strength-bar .level-2 { width: 66%; background: #f5a524; }
+.password-strength-bar .level-3 { width: 100%; background: #159b77; }
+.password-strength small {
+  font-size: 10px;
+  color: #8798af;
+}
+.password-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 9px;
+}
+.password-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  color: #8798af;
+  transition: color 0.2s;
+}
+.password-checklist li > span {
+  flex: none;
+  width: 14px;
+  display: grid;
+  place-items: center;
+}
+.password-checklist li.passed {
+  color: #159b77;
+  font-weight: 700;
+}
+.password-hint,
+.password-error {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.6;
+}
+.password-hint {
+  color: #e66d62;
+  margin-top: -8px;
+}
+.password-error {
+  padding: 10px 12px;
+  border: 1px solid #ffe0dd;
+  border-radius: 8px;
+  background: #fff6f5;
+  color: #c9443a;
+}
+.password-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+@media (max-width: 900px) {
+  .password-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.password-actions .primary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 .profile-security {
   display: flex;
   align-items: center;

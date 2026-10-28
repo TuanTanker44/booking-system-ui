@@ -5,6 +5,7 @@ export type UserStatus = "ACTIVE" | "INACTIVE" | "BANNED" | "PENDING";
 export interface User {
   id: number;
   fullName: string;
+  dateOfBirth?: string;
   avatarUrl?: string | null;
   email: string;
   phone: string;
@@ -17,6 +18,7 @@ export interface User {
 export interface ApiUser {
   id: number;
   full_name: string;
+  date_of_birth: string | null;
   email: string;
   phone: string | null;
   avatar_url: string | null;

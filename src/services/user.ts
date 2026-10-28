@@ -16,3 +16,38 @@ export async function getUsers(
 
   return data;
 }
+export interface UpdateUserPayload {
+  full_name?: string;
+  email?: string;
+  phone?: string;
+  date_of_birth?: string;
+  role?: string;
+  status?: string;
+}
+
+export interface ChangePaswordPayload {
+  current_password: string;
+  new_password: string;
+}
+
+export async function updateProfile(
+  payload: UpdateUserPayload,
+) {
+  const { data } = await axiosInstance.patch(
+    `/users/me`,
+    payload,
+  );
+
+  return data;
+}
+
+export async function changePassword(
+  payload: ChangePaswordPayload
+) {
+  const { data } = await axiosInstance.patch(
+    `/users/change-password`,
+    payload,
+  );
+
+  return data;
+}

@@ -3,12 +3,17 @@ import { useNavigate as useRouterNavigate } from "react-router-dom";
 import { LocationPermissionDialog } from "../../components/customer/LocationPermissionDialog";
 import { Avatar } from "../../components/common/Avatar";
 import { useUserStore } from "../../stores/user.js";
+import { AuthService } from "../../services/auth";
+import { changePassword, updateProfile, type UpdateUserPayload } from "../../services/user";
+import type { User } from "../../types/user";
+import { useFetched } from "./useFetched";
 import { GlobalSearch } from "../../components/customer/GlobalSearch";
 import type { SearchEntry } from "../../lib/search";
 import { getTopSellingStores, getTopSellingStoresByArea } from "../../services/store";
 import type { ApiStore, TopSellingStore } from "../../types/store";
 import { getCurrentCoordinates, parseAddressParts, parseCurrentLocation, reverseGeocode } from "../../lib/location";
 import { getErrorMessage } from "../../lib/error";
+import { isPasswordValid, PASSWORD_RULES } from "../../lib/password";
 import { ACTIVE_STATUSES, BOOKING_STATUS_LABELS, BookingService } from "../../services/booking";
 import type { Booking } from "../../types/booking";
 import { BookingPage } from "./BookingPage";
@@ -26,7 +31,7 @@ import {
   MapPin, Home, CalendarDays, Package, MapPinned, UserRound, Settings,
   Bell, ChevronDown, ChevronRight, Plus, Clock3, Star, Truck,
   CheckCircle2, WashingMachine, Shirt, Sparkles, WalletCards, Menu, X,
-  ArrowRight, CircleHelp, LogOut, Check,
+  ArrowRight, CircleHelp, LogOut, Check, Eye, EyeOff, LockKeyhole, ShieldCheck,
   BedDouble, Footprints, LocateFixed, Phone, Pencil, Trash2, BadgeCheck,
 } from "lucide-react";
 
@@ -385,7 +390,7 @@ export function CustomerDashboardPage() {
           {page === "booking" && <BookingPage form={bookingForm} stores={stores} selectedStore={selectedStore} setSelectedStore={setSelectedStore} addresses={addresses} addressesStatus={addressesStatus} goToAddresses={() => navigate("addresses")} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} notify={notify} onCreated={onBookingCreated} requestedServiceName={requestedServiceName} onRequestedServiceHandled={() => setRequestedServiceName(null)} />}
           {page === "orders" && <OrdersPage orders={orders} total={ordersTotal} status={ordersStatus} reload={reloadOrders} search={search} setSearch={setSearch} activeOrder={activeOrder} setActiveOrder={setActiveOrder} navigate={navigate} addresses={addresses} notify={notify} renderPayment={renderPayment} />}
           {page === "addresses" && <AddressesPage notify={notify} addresses={addresses} status={addressesStatus} reload={reloadAddresses} />}
-          {page === "profile" && <ProfilePage notify={notify} />}
+          {page === "profile" && <ProfilePage notify={notify} addresses={addresses} addressesStatus={addressesStatus} goToAddresses={() => navigate("addresses")} />}
         </div>
         <footer className="footer"><span>© 2026 Laundry Booking</span><span>Giặt sạch mỗi ngày, nhẹ nhàng cuộc sống <span className="footer-heart">♥</span></span></footer>
       </main>
@@ -606,18 +611,142 @@ function AddressesPage({ notify, addresses, status, reload }: { notify: (message
   </>;
 }
 
-function ProfilePage({ notify }: { notify: (message: string) => void }) {
+// Tải thông tin người dùng từ API getMe; form chỉ được dựng sau khi có dữ liệu
+type ProfileExtras = { addresses: Address[]; addressesStatus: "loading" | "ready" | "error"; goToAddresses: () => void };
+
+function ProfilePage({ notify, addresses, addressesStatus, goToAddresses }: { notify: (message: string) => void } & ProfileExtras) {
+  const [version, setVersion] = useState(0);
+  const { status, data: user } = useFetched("profile", () => AuthService.getMe(), version);
+  if (!user) {
+    return <>
+      <PageHeading eyebrow="TÀI KHOẢN CỦA BẠN" title="Thông tin cá nhân" description="Cập nhật thông tin để chúng tôi phục vụ bạn tốt hơn." />
+      <div className="panel"><div className="empty-state"><UserRound />
+        {status === "error" ? <><strong>Không thể tải thông tin cá nhân</strong><button className="outline-button" onClick={() => setVersion(v => v + 1)}>Thử lại</button></> : <strong>Đang tải thông tin cá nhân...</strong>}
+      </div></div>
+    </>;
+  }
+  return <ProfileContent user={user} notify={notify} addresses={addresses} addressesStatus={addressesStatus} goToAddresses={goToAddresses} />;
+}
+
+function ProfileContent({ user, notify, addresses, addressesStatus, goToAddresses }: { user: User; notify: (message: string) => void } & ProfileExtras) {
   const navigate = useRouterNavigate();
-  const user = useUserStore((state) => state.user);
+  // Địa chỉ mặc định lấy từ danh sách địa chỉ đã lưu; nếu chưa đặt mặc định thì dùng địa chỉ đầu tiên
+  const defaultAddress = addresses.find(item => item.isDefault) ?? addresses[0];
+  const defaultAddressText = defaultAddress ? formatAddress(defaultAddress)
+    : addressesStatus === "loading" ? "Đang tải địa chỉ..."
+    : addressesStatus === "error" ? "Không thể tải địa chỉ"
+    : "Chưa có địa chỉ nào";
   const displayName = user?.fullName || user?.email || "Khách hàng";
   const [name, setName] = useState(user?.fullName ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
+  const [dateOfBirth, setDateOfBirth] = useState(user?.dateOfBirth ?? "");
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<"info" | "password">("info");
+  const handleSave = async () => {
+    if (!name.trim()) { notify("Vui lòng nhập họ và tên."); return; }
+    // Chỉ gửi các trường đã thay đổi
+    const payload: UpdateUserPayload = {};
+    if (name.trim() !== user.fullName) payload.full_name = name.trim();
+    if (email.trim() !== user.email) payload.email = email.trim();
+    if (phone.trim() !== user.phone) payload.phone = phone.trim();
+    if (dateOfBirth && dateOfBirth !== (user.dateOfBirth ?? "")) payload.date_of_birth = dateOfBirth;
+    if (Object.keys(payload).length === 0) { setEditing(false); return; }
+    setSaving(true);
+    try {
+      await updateProfile(payload);
+      // Cập nhật store để sidebar/header hiển thị thông tin mới
+      useUserStore.setState({ user: await AuthService.getMe() });
+      setEditing(false);
+      notify("Đã lưu thông tin cá nhân.");
+    } catch (err) {
+      notify(getErrorMessage(err, "Không thể lưu thông tin. Vui lòng thử lại."));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const memberSince = user?.createdAt ? new Date(user.createdAt).toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" }) : "";
   return <>
     <PageHeading eyebrow="TÀI KHOẢN CỦA BẠN" title="Thông tin cá nhân" description="Cập nhật thông tin để chúng tôi phục vụ bạn tốt hơn." />
-    <div className="profile-layout"><aside className="panel profile-menu"><div className="profile-identity"><Avatar className="profile-avatar" name={name || displayName} src={user?.avatarUrl} /><h3>{name}</h3><p>Thành viên từ tháng 08/2026</p><span className="member-chip"><BadgeCheck size={14} /> Tài khoản đã xác thực</span></div><div className="profile-menu-list"><button className="active"><UserRound /> Thông tin cá nhân <ChevronRight /></button><button onClick={() => notify("Chức năng đổi mật khẩu sẽ kết nối API.")}><Settings /> Đổi mật khẩu <ChevronRight /></button><button onClick={() => notify("Bạn chưa có đánh giá mới.")}><Star /> Đánh giá của tôi <ChevronRight /></button><button onClick={() => navigate("/help")}><CircleHelp /> Hỗ trợ & khiếu nại <ChevronRight /></button></div><button className="logout-button" onClick={() => notify("Chức năng đăng xuất sẽ kết nối Auth API.")}><LogOut /> Đăng xuất</button></aside>
-      <div className="panel profile-form-panel"><div className="panel-heading"><div><h2>Thông tin cơ bản</h2><p>Thông tin cá nhân của bạn được bảo mật.</p></div><button className="outline-button" onClick={() => editing ? (setEditing(false), notify("Đã lưu thông tin (bản demo).")) : setEditing(true)}>{editing ? <><Check size={15} /> Lưu thay đổi</> : <><Pencil size={15} /> Chỉnh sửa</>}</button></div><div className="profile-form"><label className="field-label">Họ và tên<input disabled={!editing} value={name} onChange={e => setName(e.target.value)} /></label><label className="field-label">Địa chỉ email<input disabled={!editing} type="email" value={email} onChange={e => setEmail(e.target.value)} /></label><label className="field-label">Số điện thoại<input disabled={!editing} value={phone} onChange={e => setPhone(e.target.value)} /></label><label className="field-label">Ngày sinh<input disabled={!editing} type="date" defaultValue="2003-08-15" /></label><label className="field-label field-span">Địa chỉ mặc định<input disabled value="123 Nguyễn Văn Cừ, Quận 1, TP.HCM" /></label></div><div className="profile-security"><span><BadgeCheck /></span><div><strong>Bảo mật tài khoản</strong><p>Email và số điện thoại giúp bạn nhận thông báo về lịch lấy đồ, giao đồ và cập nhật đơn hàng.</p></div><button className="text-link" onClick={() => notify("Chức năng bảo mật sẽ kết nối Auth API.")}>Thiết lập <ArrowRight size={14} /></button></div></div>
+    <div className="profile-layout"><aside className="panel profile-menu"><div className="profile-identity"><Avatar className="profile-avatar" name={name || displayName} src={user?.avatarUrl} /><h3>{name}</h3>{memberSince && <p>Thành viên từ tháng {memberSince}</p>}<span className="member-chip"><BadgeCheck size={14} /> Tài khoản đã xác thực</span></div><div className="profile-menu-list"><button className={tab === "info" ? "active" : ""} onClick={() => setTab("info")}><UserRound /> Thông tin cá nhân <ChevronRight /></button><button className={tab === "password" ? "active" : ""} onClick={() => setTab("password")}><Settings /> Đổi mật khẩu <ChevronRight /></button><button onClick={() => notify("Bạn chưa có đánh giá mới.")}><Star /> Đánh giá của tôi <ChevronRight /></button><button onClick={() => navigate("/help")}><CircleHelp /> Hỗ trợ & khiếu nại <ChevronRight /></button></div><button className="logout-button" onClick={() => notify("Chức năng đăng xuất sẽ kết nối Auth API.")}><LogOut /> Đăng xuất</button></aside>
+      {tab === "password" ? <ChangePasswordPanel notify={notify} onCancel={() => setTab("info")} onDone={() => setTab("info")} /> : <div className="panel profile-form-panel"><div className="panel-heading"><div><h2>Thông tin cơ bản</h2><p>Thông tin cá nhân của bạn được bảo mật.</p></div><button className="outline-button" disabled={saving} onClick={() => editing ? void handleSave() : setEditing(true)}>{editing ? <><Check size={15} /> {saving ? "Đang lưu..." : "Lưu thay đổi"}</> : <><Pencil size={15} /> Chỉnh sửa</>}</button></div><div className="profile-form"><label className="field-label">Họ và tên<input disabled={!editing} value={name} onChange={e => setName(e.target.value)} /></label><label className="field-label">Địa chỉ email<input disabled={!editing} type="email" value={email} onChange={e => setEmail(e.target.value)} /></label><label className="field-label">Số điện thoại<input disabled={!editing} value={phone} onChange={e => setPhone(e.target.value)} /></label><label className="field-label">Ngày sinh<input disabled={!editing} type="date" value={dateOfBirth} onChange={e => setDateOfBirth(e.target.value)} /></label><label className="field-label field-span">Địa chỉ mặc định<input disabled value={defaultAddressText} /><button type="button" className="text-link" style={{ justifySelf: "start" }} onClick={goToAddresses}>Quản lý địa chỉ <ArrowRight size={14} /></button></label></div><div className="profile-security"><span><BadgeCheck /></span><div><strong>Bảo mật tài khoản</strong><p>Email và số điện thoại giúp bạn nhận thông báo về lịch lấy đồ, giao đồ và cập nhật đơn hàng.</p></div><button className="text-link" onClick={() => setTab("password")}>Đổi mật khẩu <ArrowRight size={14} /></button></div></div>}
     </div>
   </>;
+}
+
+type PasswordField = "current" | "next" | "confirm";
+
+function ChangePasswordPanel({ notify, onCancel, onDone }: { notify: (message: string) => void; onCancel: () => void; onDone: () => void }) {
+  const [values, setValues] = useState<Record<PasswordField, string>>({ current: "", next: "", confirm: "" });
+  const [visible, setVisible] = useState<Record<PasswordField, boolean>>({ current: false, next: false, confirm: false });
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const passedRules = PASSWORD_RULES.filter(rule => rule.test(values.next)).length;
+  const strength = !values.next ? 0 : passedRules <= 2 ? 1 : passedRules === 3 ? 2 : 3;
+  const strengthLabel = ["", "Yếu", "Trung bình", "Mạnh"][strength];
+  const confirmMismatch = values.confirm !== "" && values.confirm !== values.next;
+  const setValue = (field: PasswordField, value: string) => { setValues(prev => ({ ...prev, [field]: value })); setError(""); };
+  const toggle = (field: PasswordField) => setVisible(prev => ({ ...prev, [field]: !prev[field] }));
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!values.current) { setError("Vui lòng nhập mật khẩu hiện tại."); return; }
+    if (!isPasswordValid(values.next)) { setError("Mật khẩu mới chưa đáp ứng đủ các yêu cầu mật khẩu."); return; }
+    if (values.next === values.current) { setError("Mật khẩu mới phải khác mật khẩu hiện tại."); return; }
+    if (values.next !== values.confirm) { setError("Mật khẩu xác nhận không khớp."); return; }
+    setSubmitting(true);
+    try {
+      await changePassword({ current_password: values.current, new_password: values.next });
+      notify("Đã đổi mật khẩu thành công.");
+      onDone();
+    } catch (err) {
+      setError(getErrorMessage(err, "Không thể đổi mật khẩu. Vui lòng thử lại."));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const renderInput = (field: PasswordField, label: string, placeholder: string, autoComplete: string) => (
+    <label className="field-label">{label}
+      <span className="password-input">
+        <LockKeyhole size={15} />
+        <input type={visible[field] ? "text" : "password"} autoComplete={autoComplete} placeholder={placeholder} maxLength={72} value={values[field]} onChange={e => setValue(field, e.target.value)} />
+        <button type="button" aria-label={visible[field] ? "Ẩn mật khẩu" : "Hiện mật khẩu"} onClick={() => toggle(field)}>{visible[field] ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+      </span>
+    </label>
+  );
+  return <form className="panel profile-form-panel" onSubmit={e => void handleSubmit(e)}>
+    <div className="panel-heading"><div><h2>Đổi mật khẩu</h2><p>Dùng mật khẩu mạnh và không trùng với mật khẩu ở các dịch vụ khác.</p></div></div>
+    <div className="password-layout">
+      <div className="password-form">
+        {renderInput("current", "Mật khẩu hiện tại", "Nhập mật khẩu hiện tại", "current-password")}
+        {renderInput("next", "Mật khẩu mới", "Ít nhất 8 ký tự", "new-password")}
+        {renderInput("confirm", "Xác nhận mật khẩu mới", "Nhập lại mật khẩu mới", "new-password")}
+        {confirmMismatch && <p className="password-hint">Mật khẩu xác nhận chưa khớp.</p>}
+        {error && <p className="password-error" role="alert">{error}</p>}
+        <div className="password-actions">
+          <button type="button" className="outline-button" onClick={onCancel} disabled={submitting}>Hủy</button>
+          <button type="submit" className="primary-button" disabled={submitting}><Check size={15} /> {submitting ? "Đang cập nhật..." : "Cập nhật mật khẩu"}</button>
+        </div>
+      </div>
+      <aside className="password-aside">
+        <div className="password-aside-card">
+          <strong>Yêu cầu mật khẩu</strong>
+          <div className="password-strength" aria-live="polite">
+            <div className="password-strength-bar"><span className={`level-${strength}`} /></div>
+            <small>{strength ? `Độ mạnh: ${strengthLabel}` : "Nhập mật khẩu mới để kiểm tra độ mạnh"}</small>
+          </div>
+          <ul className="password-checklist">
+            {PASSWORD_RULES.map(rule => {
+              const passed = rule.test(values.next);
+              return <li key={rule.id} className={passed ? "passed" : ""}><span aria-hidden="true">{passed ? <Check size={12} /> : "○"}</span>{rule.label}</li>;
+            })}
+          </ul>
+        </div>
+        <div className="password-aside-card password-tips">
+          <span><ShieldCheck size={18} /></span>
+          <div><strong>Lưu ý bảo mật</strong><p>Không chia sẻ mật khẩu cho bất kỳ ai và nên đổi mật khẩu định kỳ. Sau khi đổi, bạn có thể cần đăng nhập lại trên các thiết bị khác.</p></div>
+        </div>
+      </aside>
+    </div>
+  </form>;
 }
