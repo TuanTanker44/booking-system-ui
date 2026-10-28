@@ -40,6 +40,12 @@
   height: 46px;
 }
 
+/* Ô ngày sinh: làm mờ chữ dd/mm/yyyy khi chưa nhập, giống placeholder */
+.register-card .auth-form-group input[type="date"].date-empty,
+.register-card .auth-form-group input[type="date"].date-empty::-webkit-datetime-edit {
+  color: #94a3b8;
+}
+
 /* Password checklist */
 .password-checklist {
   display: grid;

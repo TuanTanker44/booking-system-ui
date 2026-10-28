@@ -8,10 +8,19 @@ import {
 import { useUserStore } from "../../stores/user.js";
 import "./RegisterPage.css";
 
+// YYYY-MM-DD theo giờ địa phương, dùng làm giới hạn tối đa của ô ngày sinh
+function getToday(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
 export function RegisterPage() {
   const navigate = useNavigate();
 
   const [name, setName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,6 +29,8 @@ export function RegisterPage() {
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const today = getToday();
+
   async function handleSubmit(
     event: React.FormEvent<HTMLFormElement>,
   ) {
@@ -27,6 +38,11 @@ export function RegisterPage() {
 
     setError("");
     setSuccess("");
+
+    if (!dateOfBirth || dateOfBirth > today) {
+      setError("Ngày sinh không hợp lệ.");
+      return;
+    }
 
     if (!isPasswordValid(password)) {
       setError("Mật khẩu chưa đáp ứng đủ các yêu cầu bên dưới.");
@@ -46,6 +62,7 @@ export function RegisterPage() {
 
       await register({
         name: name.trim(),
+        date_of_birth: dateOfBirth,
         email: email.trim(),
         password,
       });
@@ -108,6 +125,21 @@ export function RegisterPage() {
               onChange={(event) => setName(event.target.value)}
               minLength={2}
               maxLength={100}
+              required
+            />
+          </div>
+
+          <div className="auth-form-group">
+            <label htmlFor="date-of-birth">Ngày sinh</label>
+            <input
+              id="date-of-birth"
+              type="date"
+              className={dateOfBirth ? undefined : "date-empty"}
+              autoComplete="bday"
+              value={dateOfBirth}
+              onChange={(event) => setDateOfBirth(event.target.value)}
+              min="1900-01-01"
+              max={today}
               required
             />
           </div>
