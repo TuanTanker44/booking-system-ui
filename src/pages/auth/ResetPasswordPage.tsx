@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Eye, EyeOff, LockKeyhole, ShieldCheck, WashingMachine } from "lucide-react";
 import { AuthService } from "../../services/auth";
 import { getErrorMessage } from "../../lib/error.js";
+import { isPasswordValid, PASSWORD_RULES } from "../../lib/password.js";
 import "./ResetPasswordPage.css";
 
 export function ResetPasswordPage() {
@@ -22,6 +23,11 @@ export function ResetPasswordPage() {
 
     if (!token) {
       setError("Liên kết đặt lại mật khẩu không hợp lệ hoặc thiếu token.");
+      return;
+    }
+
+    if (!isPasswordValid(password)) {
+      setError("Mật khẩu chưa đáp ứng đủ các yêu cầu bên dưới.");
       return;
     }
 
@@ -79,10 +85,10 @@ export function ResetPasswordPage() {
                   id="reset-password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
-                  placeholder="Nhập mật khẩu mới"
+                  placeholder="Ít nhất 8 ký tự"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  minLength={8}
+                  maxLength={72}
                   required
                   disabled={!token}
                 />
@@ -90,6 +96,19 @@ export function ResetPasswordPage() {
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
+
+              <ul className="reset-password-checklist" aria-live="polite">
+                {PASSWORD_RULES.map((rule) => {
+                  const passed = rule.test(password);
+
+                  return (
+                    <li key={rule.id} className={passed ? "reset-password-rule reset-password-rule-passed" : "reset-password-rule"}>
+                      <span aria-hidden="true">{passed ? "✓" : "○"}</span>
+                      {rule.label}
+                    </li>
+                  );
+                })}
+              </ul>
 
               <label htmlFor="reset-confirm-password">Xác nhận mật khẩu mới</label>
               <div className="reset-input-wrap">
@@ -110,7 +129,6 @@ export function ResetPasswordPage() {
                 </button>
               </div>
 
-              <p className="reset-password-hint">Nên dùng ít nhất 8 ký tự, kết hợp chữ hoa, chữ thường, số và ký tự đặc biệt.</p>
               {error && <p className="reset-error" role="alert">{error}</p>}
               <button className="reset-submit" type="submit" disabled={isSubmitting || !token}>
                 {isSubmitting ? "Đang cập nhật..." : "Đặt lại mật khẩu"}
