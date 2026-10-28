@@ -1,18 +1,6 @@
 import axiosInstance from "../lib/axios";
-import type { AuthResponse, LoginDto, RegisterDto, ResendVerificationDto } from "../types/auth";
-import type { User, UserRole, UserStatus } from "../types/user";
-
-// Dữ liệu backend trả về (snake_case, enum chữ thường)
-interface ApiUser {
-  id: number;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  avatar_url: string | null;
-  role: "admin" | "laundry_staff" | "shipper" | "customer";
-  status: "active" | "inactive" | "banned";
-  created_at: string;
-}
+import type { ApiTokenResponse, AuthResponse, LoginDto, RegisterDto, ResendVerificationDto } from "../types/auth";
+import type { ApiUser, User, UserRole, UserStatus } from "../types/user";
 
 const ROLE_MAP: Record<ApiUser["role"], UserRole> = {
   admin: "ADMIN",
@@ -38,10 +26,6 @@ function toUser(apiUser: ApiUser): User {
     status: STATUS_MAP[apiUser.status],
     createdAt: apiUser.created_at,
   };
-}
-
-interface ApiTokenResponse {
-  access_token: string;
 }
 
 export const AuthService = {

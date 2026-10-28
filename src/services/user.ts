@@ -1,21 +1,5 @@
 import axiosInstance from "../lib/axios";
-import type { User } from "../types/user";
-
-export interface GetUsersParams {
-  page?: number;
-  limit?: number;
-  search?: string;
-  role?: User["role"] | "ALL";
-  status?: User["status"] | "ALL";
-}
-
-export interface PaginatedUsers {
-  data: User[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+import type { GetUsersParams, PaginatedUsers } from "../types/user";
 
 export async function getUsers(
   params: GetUsersParams = {},
