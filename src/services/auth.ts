@@ -66,5 +66,9 @@ export const AuthService = {
 
   async resendVerification(dto: ResendVerificationDto): Promise<void> {
     await axiosInstance.post("/auth/resend-verification", dto);
+  },
+
+  async forgotPassword(dto: { email: string }): Promise<void> {
+    await axiosInstance.post("/auth/forgot-password", dto);
   }
 };
