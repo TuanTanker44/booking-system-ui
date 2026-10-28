@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight, BadgeCheck, CalendarDays, Check, CheckCircle2, CircleHelp, Home, MapPin, MapPinned,
   Minus, Package, Plus, Search, Shirt, Star, Tag, Trash2, Truck, WashingMachine,
@@ -45,16 +45,53 @@ const serviceQuantity = (service: StoreService, weight: string, items: ItemRow[]
 
 const unitLabel = (service: StoreService) => service.pricing_unit === "per_kg" ? "kg" : "món";
 
+function normalizeServiceName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function findMatchingService(
+  services: StoreService[],
+  requestedName: string,
+): StoreService | undefined {
+  const requested = normalizeServiceName(requestedName);
+
+  // Ưu tiên khớp tên chính xác.
+  const exactMatch = services.find(
+    service => normalizeServiceName(service.name) === requested,
+  );
+
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  // Nếu tên có khác biệt nhỏ, thử khớp tên chứa nhau.
+  return services.find(service => {
+    const actual = normalizeServiceName(service.name);
+
+    return actual.includes(requested) || requested.includes(actual);
+  });
+}
+
 export function BookingPage(props: {
   form: BookingForm;
   stores: BookingStoreItem[];
   selectedStore: number | null; setSelectedStore: (id: number) => void;
   addresses: Address[]; addressesStatus: "loading" | "ready" | "error"; goToAddresses: () => void;
   selectedAddress: number | null; setSelectedAddress: (id: number) => void;
+  // Tên dịch vụ khách chọn ở trang chủ / ô tìm kiếm: BookingPage tìm dịch vụ tương ứng rồi gọi onRequestedServiceHandled
+  requestedServiceName: string | null;
+  onRequestedServiceHandled: () => void;
   notify: (message: string) => void;
   onCreated: (booking: Booking) => void;
 }) {
-  const { form, stores, selectedStore, setSelectedStore, addresses, addressesStatus, goToAddresses, selectedAddress, setSelectedAddress, notify, onCreated } = props;
+  const { form, stores, selectedStore, setSelectedStore, addresses, addressesStatus, goToAddresses, selectedAddress, setSelectedAddress, requestedServiceName, onRequestedServiceHandled, notify, onCreated } = props;
   const { step, setStep } = form;
   const [storeQuery, setStoreQuery] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -119,6 +156,59 @@ export function BookingPage(props: {
     form.setItems(current => [...current, { key: form.nextItemKey, name: "", quantity: 1 }]);
     form.setNextItemKey(form.nextItemKey + 1);
   };
+
+  // ---- Dịch vụ khách chọn từ trang chủ: ưu tiên cửa hàng đang chọn, không có thì chuyển sang cửa hàng đầu tiên có dịch vụ đó
+  const { setServiceId } = form;
+  const servicesStatus = servicesFetch.status;
+  const servicesData = servicesFetch.data;
+  // Giữ callback mới nhất mà không làm effect bên dưới chạy lại (và hủy request đang bay) mỗi lần render
+  const callbacksRef = useRef({ notify, onRequestedServiceHandled });
+  useEffect(() => {
+    callbacksRef.current = { notify, onRequestedServiceHandled };
+  });
+
+  useEffect(() => {
+    // Chờ danh sách cửa hàng và dịch vụ của cửa hàng đang chọn tải xong
+    if (!requestedServiceName || stores.length === 0 || servicesStatus === "loading") return;
+
+    const matchInCurrentStore = servicesData && findMatchingService(servicesData, requestedServiceName);
+    if (matchInCurrentStore) {
+      setServiceId(matchInCurrentStore.id);
+      callbacksRef.current.onRequestedServiceHandled();
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const findInOtherStores = async () => {
+      const results = await Promise.all(
+        stores.filter(store => store.id !== storeId).map(async store => {
+          try {
+            return { store, service: findMatchingService(await getStoreServices(store.id, {}, controller.signal), requestedServiceName) };
+          } catch {
+            // Một cửa hàng lỗi không ngăn việc tìm các cửa hàng còn lại
+            return { store, service: undefined };
+          }
+        }),
+      );
+
+      if (controller.signal.aborted) return;
+
+      // Promise.all giữ thứ tự của stores nên lấy cửa hàng đầu tiên có dịch vụ
+      const match = results.find(result => result.service);
+      if (match?.service) {
+        setSelectedStore(match.store.id);
+        setServiceId(match.service.id);
+      } else {
+        callbacksRef.current.notify(`Không tìm thấy cửa hàng cung cấp dịch vụ "${requestedServiceName}".`);
+      }
+      callbacksRef.current.onRequestedServiceHandled();
+    };
+
+    void findInOtherStores();
+
+    return () => controller.abort();
+  }, [requestedServiceName, stores, storeId, servicesStatus, servicesData, setServiceId, setSelectedStore]);
 
   return <>
     <PageHeading eyebrow="ĐẶT LỊCH ONLINE" title="Đặt lịch giặt của bạn" description="Chỉ vài bước đơn giản để quần áo sạch thơm được giao tận nhà." action={<div className="secure-note"><BadgeCheck size={17} /> Đặt lịch an toàn</div>} />

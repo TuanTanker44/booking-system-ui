@@ -65,6 +65,8 @@ export function CustomerDashboardPage() {
   const [activeOrder, setActiveOrder] = useState<number | null>(null);
   const bookingForm = useBookingForm();
   const [selectedStore, setSelectedStore] = useState<number | null>(null);
+  // Dịch vụ khách chọn ở trang chủ / tìm kiếm, chờ BookingPage tìm dịch vụ tương ứng của cửa hàng
+  const [requestedServiceName, setRequestedServiceName] = useState<string | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<number | null>(null);
   const [toast, setToast] = useState("");
   const [detectedAddress, setDetectedAddress] = useState("");
@@ -156,6 +158,8 @@ export function CustomerDashboardPage() {
 
   const navigate = (next: Page) => {
     setPage(next);
+    // Rời khỏi đặt lịch thì bỏ yêu cầu chọn dịch vụ chưa xử lý xong
+    if (next !== "booking") setRequestedServiceName(null);
     setMobileMenu(false);
     setActiveOrder(null);
     // Rời trang thì bỏ phiên thanh toán đang mở (đơn vẫn ở trạng thái chờ thanh toán)
@@ -287,22 +291,35 @@ export function CustomerDashboardPage() {
       fields: [{ label: "Dịch vụ", value: order.service_name }, { label: "Mã đơn", value: order.booking_code }],
     })),
   ], [addresses, orders]);
+  // Mở đặt lịch từ trang chủ / tìm kiếm với cửa hàng hoặc dịch vụ đã chọn sẵn, quay về bước 1
+  const startBooking = ({ storeId, serviceName }: { storeId?: number; serviceName?: string } = {}) => {
+    if (storeId !== undefined) {
+      // Dịch vụ thuộc từng cửa hàng: đổi cửa hàng thì bỏ dịch vụ đã chọn trước đó
+      if (storeId !== (selectedStore ?? stores[0]?.id)) bookingForm.setServiceId(null);
+      setSelectedStore(storeId);
+    }
+    setRequestedServiceName(serviceName ?? null);
+    bookingForm.setStep(1);
+    navigate("booking");
+  };
   // Chọn cửa hàng từ kết quả API: thêm vào danh sách (nếu chưa có) rồi mở đặt lịch
   const selectApiStore = (store: ApiStore) => {
     setStores(current => current.some(item => item.id === store.id) ? current : [{
       id: store.id, name: store.name, address: store.address, phone: store.phone ?? "",
       distance: store.distance_km != null ? `${String(store.distance_km).replace(".", ",")} km` : undefined,
     }, ...current]);
-    setSelectedStore(store.id);
-    bookingForm.setStep(1);
-    navigate("booking");
+    startBooking({ storeId: store.id });
   };
   const selectSearchEntry = (entry: SearchEntry, store?: ApiStore) => {
     const key = entry.id.slice(entry.id.indexOf("-") + 1);
     if (entry.type === "store") {
       if (store) selectApiStore(store);
     } else if (entry.type === "service") {
-      navigate("booking");
+      const service = services.find(
+        item => item.id === Number(key),
+      );
+
+      startBooking({ serviceName: service?.name });
     } else if (entry.type === "address") {
       navigate("addresses");
     } else {
@@ -362,8 +379,8 @@ export function CustomerDashboardPage() {
         </header>
 
         <div className="page-content">
-          {page === "home" && <HomePage navigate={navigate} setSearch={setSearch} stores={stores} storesStatus={storesStatus} detectedAddress={detectedAddress} />}
-          {page === "booking" && <BookingPage form={bookingForm} stores={stores} selectedStore={selectedStore} setSelectedStore={setSelectedStore} addresses={addresses} addressesStatus={addressesStatus} goToAddresses={() => navigate("addresses")} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} notify={notify} onCreated={onBookingCreated} />}
+          {page === "home" && (<HomePage navigate={navigate} setSearch={setSearch} stores={stores} storesStatus={storesStatus} detectedAddress={detectedAddress} onSelectService={service => startBooking({ serviceName: service.name })} onSelectStore={store => startBooking({ storeId: store.id })} />)}
+          {page === "booking" && <BookingPage form={bookingForm} stores={stores} selectedStore={selectedStore} setSelectedStore={setSelectedStore} addresses={addresses} addressesStatus={addressesStatus} goToAddresses={() => navigate("addresses")} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} notify={notify} onCreated={onBookingCreated} requestedServiceName={requestedServiceName} onRequestedServiceHandled={() => setRequestedServiceName(null)} />}
           {page === "orders" && <OrdersPage orders={orders} total={ordersTotal} status={ordersStatus} reload={reloadOrders} search={search} setSearch={setSearch} activeOrder={activeOrder} setActiveOrder={setActiveOrder} navigate={navigate} addresses={addresses} notify={notify} renderPayment={renderPayment} />}
           {page === "addresses" && <AddressesPage notify={notify} addresses={addresses} status={addressesStatus} reload={reloadAddresses} />}
           {page === "profile" && <ProfilePage notify={notify} />}
@@ -439,7 +456,7 @@ export function CustomerDashboardPage() {
   );
 }
 
-function HomePage({ navigate, setSearch, stores, storesStatus, detectedAddress }: { navigate: (page: Page) => void; setSearch: (value: string) => void; stores: StoreItem[]; storesStatus: "loading" | "ready" | "error"; detectedAddress: string }) {
+function HomePage({ navigate, setSearch, stores, storesStatus, detectedAddress, onSelectService, onSelectStore }: { navigate: (page: Page) => void; setSearch: (value: string) => void; stores: StoreItem[]; storesStatus: "loading" | "ready" | "error"; detectedAddress: string; onSelectService: (service: Service) => void; onSelectStore: (store: StoreItem) => void }) {
   // Đã có vị trí người dùng: hiện địa chỉ thay cho ô nhập, cho phép đổi sang nhập tay
   const [editingLocation, setEditingLocation] = useState(false);
   const showDetected = Boolean(detectedAddress) && !editingLocation;
@@ -471,13 +488,13 @@ function HomePage({ navigate, setSearch, stores, storesStatus, detectedAddress }
 
     <section className="section-block">
       <div className="section-title"><div><span className="eyebrow">DỊCH VỤ CỦA CHÚNG TÔI</span><h2>Chọn dịch vụ phù hợp</h2><p>Chăm sóc từng món đồ theo cách tốt nhất.</p></div><button className="text-link" onClick={() => navigate("booking")}>Tất cả dịch vụ <ArrowRight size={16} /></button></div>
-      <div className="service-grid">{services.map((service, index) => <button className="service-card" key={service.id} onClick={() => navigate("booking")}><div className={`service-art art-${index + 1}`}>{iconFor(service.icon)}</div><span className={`service-deco art-${index + 1}`} aria-hidden="true">{iconFor(service.icon)}</span><h3>{service.name}</h3><p>{service.description}</p><div className="service-price"><strong>{formatMoney(service.price)}</strong><span>/{service.unit}</span><ArrowRight size={16} /></div></button>)}</div>
+      <div className="service-grid">{services.map((service, index) => <button className="service-card" key={service.id} onClick={() => onSelectService(service)}><div className={`service-art art-${index + 1}`}>{iconFor(service.icon)}</div><span className={`service-deco art-${index + 1}`} aria-hidden="true">{iconFor(service.icon)}</span><h3>{service.name}</h3><p>{service.description}</p><div className="service-price"><strong>{formatMoney(service.price)}</strong><span>/{service.unit}</span><ArrowRight size={16} /></div></button>)}</div>
     </section>
 
     <section className="section-block store-section">
       <div className="section-title"><div><span className="eyebrow">GẦN BẠN</span><h2>Cửa hàng được yêu thích</h2><p>Chọn cửa hàng phù hợp với lịch trình của bạn.</p></div><button className="text-link" onClick={() => navigate("booking")}>Xem tất cả <ArrowRight size={16} /></button></div>
       {stores.length === 0 && <div className="empty-state"><WashingMachine /><strong>{storesStatus === "loading" ? "Đang tải cửa hàng..." : storesStatus === "error" ? "Không thể tải danh sách cửa hàng" : "Chưa có cửa hàng nào"}</strong></div>}
-      <div className="store-grid">{stores.map((store, i) => <div className="store-card" key={store.id}><div className={`store-thumb store-thumb-${(i % 3) + 1}`}><div className="store-building"><span /><span /><span /><span /></div><span className="store-open"><i /> Đang mở cửa</span></div><div className="store-info"><div className="store-name-row"><h3>{store.name}</h3>{store.rating !== undefined && <span className="rating"><Star size={13} fill="currentColor" /> {store.rating}</span>}</div><p><MapPin size={14} /> {store.address}</p><div className="store-meta">{store.distance && <span><Truck size={14} /> {store.distance}</span>}{store.time && <span><Clock3 size={14} /> {store.time}</span>}{store.reviews !== undefined && <span>({store.reviews} đánh giá)</span>}{store.completedBookings !== undefined && <span>{store.completedBookings} đơn hoàn thành</span>}</div><button className="outline-button" onClick={() => navigate("booking")}>Chọn cửa hàng <ArrowRight size={15} /></button></div></div>)}</div>
+      <div className="store-grid">{stores.map((store, i) => <div className="store-card" key={store.id}><div className={`store-thumb store-thumb-${(i % 3) + 1}`}><div className="store-building"><span /><span /><span /><span /></div><span className="store-open"><i /> Đang mở cửa</span></div><div className="store-info"><div className="store-name-row"><h3>{store.name}</h3>{store.rating !== undefined && <span className="rating"><Star size={13} fill="currentColor" /> {store.rating}</span>}</div><p><MapPin size={14} /> {store.address}</p><div className="store-meta">{store.distance && <span><Truck size={14} /> {store.distance}</span>}{store.time && <span><Clock3 size={14} /> {store.time}</span>}{store.reviews !== undefined && <span>({store.reviews} đánh giá)</span>}{store.completedBookings !== undefined && <span>{store.completedBookings} đơn hoàn thành</span>}</div><button className="outline-button" onClick={() => onSelectStore(store)}>Chọn cửa hàng <ArrowRight size={15} /></button></div></div>)}</div>
     </section>
 
     <section className="bottom-cta"><div className="cta-spark cta-spark-one">✦</div><div className="cta-copy"><span className="eyebrow">BẮT ĐẦU NGAY HÔM NAY</span><h2>Để việc giặt giũ cho chúng tôi.</h2><p>Đặt lịch chỉ trong vài phút, nhận quần áo sạch thơm ngay tại nhà.</p><button className="white-button" onClick={() => navigate("booking")}>Đặt lịch giặt ngay <ArrowRight size={16} /></button></div><div className="cta-illustration"><div className="cta-shirt"><Shirt /></div><div className="cta-basket"><span /><span /><span /></div><div className="cta-spark cta-spark-two">✦</div></div></section>
