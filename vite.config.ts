@@ -10,4 +10,7 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss()
   ],
+  server: {
+    allowedHosts: ['steadier-driveway-reconcile.ngrok-free.dev']
+  }
 })

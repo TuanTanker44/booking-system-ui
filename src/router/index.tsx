@@ -48,7 +48,7 @@ export function AppRouter() {
 
       <Route path="/payment/result" element={<PaymentResultPage />} />
       <Route path="/forbidden" element={<ForbiddenPage />} />
-      <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
