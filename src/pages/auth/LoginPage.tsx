@@ -100,6 +100,9 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+            <div className="auth-forgot-password-row">
+              <Link to="/forgot-password">Quên mật khẩu?</Link>
+            </div>
           </div>
 
           {error && (
