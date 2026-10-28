@@ -171,6 +171,25 @@
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12);
 }
 
+.auth-forgot-password-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -1px;
+}
+
+.auth-forgot-password-row a {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.auth-forgot-password-row a:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
 /* ===== Error ===== */
 .auth-error {
   margin: -8px 0 0;
