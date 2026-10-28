@@ -4,23 +4,33 @@ import { Avatar } from "../../components/common/Avatar";
 import { useUserStore } from "../../stores/user.js";
 import { GlobalSearch } from "../../components/customer/GlobalSearch";
 import type { SearchEntry } from "../../lib/search";
-import { getTopSellingStores, getTopSellingStoresByArea, type ApiStore, type TopSellingStore } from "../../services/store";
+import { getTopSellingStores, getTopSellingStoresByArea } from "../../services/store";
+import type { ApiStore, TopSellingStore } from "../../types/store";
 import { getCurrentCoordinates, parseAddressParts, parseCurrentLocation, reverseGeocode } from "../../lib/location";
 import { getErrorMessage } from "../../lib/error";
-import { PICKUP_SLOTS, firstAvailableSlot, getDefaultPickup, isSlotAvailable, toLocalDateString } from "../../lib/pickup";
+import { ACTIVE_STATUSES, BOOKING_STATUS_LABELS, BookingService } from "../../services/booking";
+import type { Booking } from "../../types/booking";
+import { BookingPage } from "./BookingPage";
+import { useBookingForm } from "./useBookingForm";
+import { OrdersPage } from "./OrdersPage";
+import { PageHeading } from "./PageHeading";
+import { formatMoney } from "./format";
+import { PaymentCheckout } from "./PaymentCheckout";
+import { PaymentService } from "../../services/payment";
+import type { CreatePaymentResponse, OnlinePaymentMethod } from "../../types/payment";
 import { DEFAULT_CITY, CITIES, getDistricts, getWards, matchName, stripAdminPrefix } from "../../lib/vn-address";
-import { AddressService, formatAddress, type Address, type AddressInput } from "../../services/address";
+import { AddressService, formatAddress } from "../../services/address";
+import type { Address, AddressInput } from "../../types/address";
 import {
   MapPin, Home, CalendarDays, Package, MapPinned, UserRound, Settings,
-  Search, Bell, ChevronDown, ChevronRight, Plus, Clock3, Star, Truck,
+  Bell, ChevronDown, ChevronRight, Plus, Clock3, Star, Truck,
   CheckCircle2, WashingMachine, Shirt, Sparkles, WalletCards, Menu, X,
-  ArrowRight, SlidersHorizontal, CircleHelp, LogOut, CreditCard, Check,
-  Minus, BedDouble, Footprints, LocateFixed, Phone, Pencil, Trash2, BadgeCheck, Tag,
+  ArrowRight, CircleHelp, LogOut, Check,
+  BedDouble, Footprints, LocateFixed, Phone, Pencil, Trash2, BadgeCheck,
 } from "lucide-react";
 
 type Page = "home" | "booking" | "orders" | "addresses" | "profile";
 type Service = { id: number; name: string; description: string; price: number; unit: string; icon: "wash" | "shirt" | "bed" | "shoe" };
-type OrderStatus = "Đang xác nhận" | "Đang giặt" | "Sẵn sàng giao" | "Hoàn thành" | "Đã hủy";
 
 const services: Service[] = [
   { id: 1, name: "Giặt theo kg", description: "Giặt sấy thường ngày", price: 15000, unit: "kg", icon: "wash" },
@@ -35,15 +45,6 @@ const toStoreItem = (store: TopSellingStore): StoreItem => ({
   id: store.id, name: store.name, address: store.address, phone: store.phone ?? "", completedBookings: store.completedBookings,
 });
 
-const initialOrders = [
-  { code: "LB20251015", date: "15/10/2026", store: "Laundry Center - Quận 1", service: "Giặt theo kg (5 kg)", total: 95000, status: "Đang giặt" as OrderStatus },
-  { code: "LB20251014", date: "14/10/2026", store: "Fresh Laundry - Quận 3", service: "Giặt chăn ga (1 bộ)", total: 180000, status: "Sẵn sàng giao" as OrderStatus },
-  { code: "LB20251013", date: "13/10/2026", store: "Clean & Go - Quận 10", service: "Giặt hấp (2 áo)", total: 120000, status: "Hoàn thành" as OrderStatus },
-];
-
-
-const formatMoney = (value: number) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(value);
-const statusClass = (status: OrderStatus) => status === "Hoàn thành" ? "success" : status === "Đã hủy" ? "danger" : status === "Sẵn sàng giao" ? "purple" : "blue";
 const serviceIcons: Record<Service["icon"], React.ReactNode> = {
   wash: <WashingMachine />,
   shirt: <Shirt />,
@@ -58,17 +59,13 @@ export function CustomerDashboardPage() {
   const [page, setPage] = useState<Page>("home");
   const [mobileMenu, setMobileMenu] = useState(false);
   const [search, setSearch] = useState("");
-  const [orders, setOrders] = useState(initialOrders);
-  const [activeOrder, setActiveOrder] = useState<string | null>(null);
-  const [bookingStep, setBookingStep] = useState(1);
-  const [selectedStore, setSelectedStore] = useState(1);
-  const [quantities, setQuantities] = useState<Record<number, number>>({ 1: 0, 2: 0, 3: 0, 4: 0 });
-  // Mặc định: hôm nay + khung giờ hiện tại (hết giờ hôm nay thì sang ngày mai)
-  const [defaultPickup] = useState(() => getDefaultPickup());
-  const [pickupDate, setPickupDate] = useState(defaultPickup.date);
-  const [pickupTime, setPickupTime] = useState(defaultPickup.time);
+  const [orders, setOrders] = useState<Booking[]>([]);
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [ordersStatus, setOrdersStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [activeOrder, setActiveOrder] = useState<number | null>(null);
+  const bookingForm = useBookingForm();
+  const [selectedStore, setSelectedStore] = useState<number | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<number | null>(null);
-  const [payment, setPayment] = useState("vnpay");
   const [toast, setToast] = useState("");
   const [detectedAddress, setDetectedAddress] = useState("");
   // currentLocation { ward, district, city } suy ra từ detectedAddress
@@ -101,6 +98,35 @@ export function CustomerDashboardPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Đơn hàng của tôi (100 đơn mới nhất)
+  const reloadOrders = async () => {
+    try {
+      const result = await BookingService.listMine({ limit: 100 });
+      setOrders(result.data);
+      setOrdersTotal(result.meta.total);
+      setOrdersStatus("ready");
+    } catch {
+      setOrdersStatus("error");
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    BookingService.listMine({ limit: 100 })
+      .then((result) => {
+        if (cancelled) return;
+        setOrders(result.data);
+        setOrdersTotal(result.meta.total);
+        setOrdersStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setOrdersStatus("error");
+      });
+
+    return () => { cancelled = true; };
+  }, []);
+
   const [stores, setStores] = useState<StoreItem[]>([]);
   const [storesStatus, setStoresStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -128,33 +154,121 @@ export function CustomerDashboardPage() {
     return () => controller.abort();
   }, [currentLocation]);
 
-  const total = useMemo(() => services.reduce((sum, item) => sum + item.price * (quantities[item.id] || 0), 0), [quantities]);
-  const filteredOrders = orders.filter(order => [order.code, order.store, order.service, order.status].some(value => value.toLowerCase().includes(search.toLowerCase())));
-
   const navigate = (next: Page) => {
     setPage(next);
     setMobileMenu(false);
     setActiveOrder(null);
+    // Rời trang thì bỏ phiên thanh toán đang mở (đơn vẫn ở trạng thái chờ thanh toán)
+    setCheckoutBooking(null);
+    setCheckoutPayment(null);
   };
   const notify = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
   };
-  const changeQuantity = (id: number, delta: number) => setQuantities(current => ({ ...current, [id]: Math.max(0, (current[id] || 0) + delta) }));
-  const submitBooking = () => {
-    const newOrder = {
-      code: `LB${Date.now().toString().slice(-8)}`,
-      date: new Date().toLocaleDateString("vi-VN"),
-      store: stores.find(store => store.id === selectedStore)?.name || stores[0]?.name || "",
-      service: services.filter(service => quantities[service.id] > 0).map(service => `${service.name} (${quantities[service.id]} ${service.unit})`).join(", "),
-      total: total + Math.round(total * 0.1),
-      status: "Đang xác nhận" as OrderStatus,
-    };
-    setOrders(current => [newOrder, ...current]);
-    setActiveOrder(newOrder.code);
+
+  // Đặt lịch thành công: tải lại danh sách đơn rồi mở chi tiết đơn vừa tạo
+  const [checkoutBooking, setCheckoutBooking] = useState<Booking | null>(null);
+  const [checkoutPayment, setCheckoutPayment] = useState<CreatePaymentResponse | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<OnlinePaymentMethod>("vnpay");
+  const [creatingPayment, setCreatingPayment] = useState(false);
+  // Lỗi tạo giao dịch hiển thị ngay trong hộp thoại (toast dễ bị bỏ lỡ)
+  const [paymentError, setPaymentError] = useState("");
+  const onBookingCreated = (booking: Booking) => {
+    void reloadOrders();
+
+    setActiveOrder(booking.id);
+    setCheckoutBooking(booking);
+    setCheckoutPayment(null);
+    setPaymentError("");
     setPage("orders");
-    setBookingStep(1);
-    notify("Đặt lịch thành công! Đơn hàng đang chờ xác nhận.");
+
+    notify("Đặt lịch thành công! Vui lòng chọn phương thức thanh toán.");
+  };
+
+  const startPayment = async (method: OnlinePaymentMethod) => {
+    if (!checkoutBooking || creatingPayment) return;
+
+    setCreatingPayment(true);
+    setPaymentError("");
+
+    try {
+      // PaymentService.create đã trả sẵn dữ liệu giao dịch (gồm payment_url và qr_code_url)
+      const payment = await PaymentService.create({
+        booking_id: checkoutBooking.id,
+        method,
+      });
+
+      setCheckoutPayment(payment);
+      setPaymentMethod(method);
+
+      notify("Đã tạo giao dịch. Vui lòng hoàn tất thanh toán.");
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, "Không thể tạo giao dịch thanh toán. Vui lòng thử lại.");
+      setPaymentError(message);
+      notify(message);
+    } finally {
+      setCreatingPayment(false);
+    }
+  };
+
+  // Backend xác nhận đã thanh toán: làm mới danh sách đơn để trạng thái chuyển khỏi "Chờ thanh toán"
+  const onPaymentSuccess = () => {
+    void reloadOrders();
+    notify("Thanh toán thành công!");
+  };
+
+  // Giao diện thanh toán chỉ hiện trong chi tiết đúng đơn vừa đặt, ngay dưới panel theo dõi đơn
+  const renderPayment = (orderId: number) =>
+    checkoutBooking && checkoutPayment && checkoutBooking.id === orderId ? (
+      <PaymentCheckout
+        payment={checkoutPayment}
+        bookingId={checkoutBooking.id}
+        bookingCode={checkoutBooking.booking_code}
+        onBack={() => setCheckoutPayment(null)}
+        onPaid={onPaymentSuccess}
+        onClose={closeCheckout}
+      />
+    ) : null;
+
+  // Mở chi tiết đơn đang chờ thanh toán mà backend còn giao dịch dùng được (đang chờ, chưa hết hạn): tự hiện lại QR
+  useEffect(() => {
+    if (activeOrder === null || checkoutBooking?.id === activeOrder) return;
+
+    const order = orders.find(item => item.id === activeOrder);
+    if (!order || order.status !== "pending_payment") return;
+
+    let cancelled = false;
+
+    PaymentService.listByBooking(order.id)
+      .then((payments) => {
+        if (cancelled) return;
+
+        // Danh sách mới nhất trước; backend chỉ trả payment_url / expires_at cho giao dịch còn dùng được
+        for (const item of payments) {
+          if (item.method === "cash" || !item.payment_url || !item.expires_at) continue;
+
+          setPaymentMethod(item.method);
+          setCheckoutBooking(order);
+          setCheckoutPayment({
+            payment_id: item.id,
+            method: item.method,
+            amount: item.amount,
+            payment_url: item.payment_url,
+            qr_code_url: item.qr_code_url,
+            expires_at: item.expires_at,
+          });
+          return;
+        }
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [activeOrder, orders, checkoutBooking]);
+
+  const closeCheckout = () => {
+    setCheckoutPayment(null);
+    setCheckoutBooking(null);
   };
 
   // Dữ liệu cho ô tìm kiếm: tên, địa chỉ, mô tả, số điện thoại
@@ -169,8 +283,8 @@ export function CustomerDashboardPage() {
       fields: [{ label: "Địa chỉ", value: formatAddress(item) }, { label: "SĐT", value: item.phone, kind: "phone" as const }],
     })),
     ...orders.map(order => ({
-      id: `order-${order.code}`, type: "order" as const, title: `Đơn ${order.code}`, subtitle: `${order.service} · ${order.status}`,
-      fields: [{ label: "Dịch vụ", value: order.service }, { label: "Cửa hàng", value: order.store }, { label: "Mã đơn", value: order.code }],
+      id: `order-${order.id}`, type: "order" as const, title: `Đơn ${order.booking_code}`, subtitle: `${order.service_name} · ${BOOKING_STATUS_LABELS[order.status]}`,
+      fields: [{ label: "Dịch vụ", value: order.service_name }, { label: "Mã đơn", value: order.booking_code }],
     })),
   ], [addresses, orders]);
   // Chọn cửa hàng từ kết quả API: thêm vào danh sách (nếu chưa có) rồi mở đặt lịch
@@ -180,7 +294,7 @@ export function CustomerDashboardPage() {
       distance: store.distance_km != null ? `${String(store.distance_km).replace(".", ",")} km` : undefined,
     }, ...current]);
     setSelectedStore(store.id);
-    setBookingStep(1);
+    bookingForm.setStep(1);
     navigate("booking");
   };
   const selectSearchEntry = (entry: SearchEntry, store?: ApiStore) => {
@@ -189,12 +303,11 @@ export function CustomerDashboardPage() {
       if (store) selectApiStore(store);
     } else if (entry.type === "service") {
       navigate("booking");
-      if (!quantities[Number(key)]) changeQuantity(Number(key), 1);
     } else if (entry.type === "address") {
       navigate("addresses");
     } else {
       navigate("orders");
-      setActiveOrder(key);
+      setActiveOrder(Number(key));
     }
   };
 
@@ -219,7 +332,7 @@ export function CustomerDashboardPage() {
         <nav className="side-nav">
           {navItems.map(item => (
             <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => navigate(item.id)}>
-              {item.icon}<span>{item.label}</span>{item.id === "orders" && <span className="nav-count">{orders.filter(o => o.status !== "Hoàn thành" && o.status !== "Đã hủy").length}</span>}
+              {item.icon}<span>{item.label}</span>{item.id === "orders" && <span className="nav-count">{orders.filter(o => ACTIVE_STATUSES.includes(o.status)).length}</span>}
             </button>
           ))}
         </nav>
@@ -250,13 +363,67 @@ export function CustomerDashboardPage() {
 
         <div className="page-content">
           {page === "home" && <HomePage navigate={navigate} setSearch={setSearch} stores={stores} storesStatus={storesStatus} detectedAddress={detectedAddress} />}
-          {page === "booking" && <BookingPage stores={stores} step={bookingStep} setStep={setBookingStep} selectedStore={selectedStore} setSelectedStore={setSelectedStore} quantities={quantities} changeQuantity={changeQuantity} total={total} pickupDate={pickupDate} setPickupDate={setPickupDate} pickupTime={pickupTime} setPickupTime={setPickupTime} addresses={addresses} addressesStatus={addressesStatus} goToAddresses={() => navigate("addresses")} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} payment={payment} setPayment={setPayment} submitBooking={submitBooking} notify={notify} />}
-          {page === "orders" && <OrdersPage orders={filteredOrders} search={search} setSearch={setSearch} activeOrder={activeOrder} setActiveOrder={setActiveOrder} navigate={navigate} />}
+          {page === "booking" && <BookingPage form={bookingForm} stores={stores} selectedStore={selectedStore} setSelectedStore={setSelectedStore} addresses={addresses} addressesStatus={addressesStatus} goToAddresses={() => navigate("addresses")} selectedAddress={selectedAddress} setSelectedAddress={setSelectedAddress} notify={notify} onCreated={onBookingCreated} />}
+          {page === "orders" && <OrdersPage orders={orders} total={ordersTotal} status={ordersStatus} reload={reloadOrders} search={search} setSearch={setSearch} activeOrder={activeOrder} setActiveOrder={setActiveOrder} navigate={navigate} addresses={addresses} notify={notify} renderPayment={renderPayment} />}
           {page === "addresses" && <AddressesPage notify={notify} addresses={addresses} status={addressesStatus} reload={reloadAddresses} />}
           {page === "profile" && <ProfilePage notify={notify} />}
         </div>
         <footer className="footer"><span>© 2026 Laundry Booking</span><span>Giặt sạch mỗi ngày, nhẹ nhàng cuộc sống <span className="footer-heart">♥</span></span></footer>
       </main>
+      {checkoutBooking && !checkoutPayment && (
+        <div className="payment-method-overlay">
+          <section className="payment-method-dialog">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Đóng"
+              onClick={() => setCheckoutBooking(null)}
+              disabled={creatingPayment}
+            >
+              <X />
+            </button>
+
+            <h2>Chọn phương thức thanh toán</h2>
+            <p>
+              Đơn hàng <strong>{checkoutBooking.booking_code}</strong>
+            </p>
+
+            <label className="payment-method-option">
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="vnpay"
+                checked={paymentMethod === "vnpay"}
+                onChange={() => setPaymentMethod("vnpay")}
+                disabled={creatingPayment}
+              />
+              <span>VNPay</span>
+            </label>
+
+            {/* Tạm ẩn MoMo, chỉ hỗ trợ VNPay */}
+
+            {paymentError && <p className="payment-method-error" role="alert">{paymentError}</p>}
+            <button
+              type="button"
+              className="primary-button"
+              disabled={creatingPayment}
+              onClick={() => void startPayment(paymentMethod)}
+            >
+              {creatingPayment ? "Đang tạo giao dịch..." : "Tiếp tục thanh toán"}
+            </button>
+
+            <button
+              type="button"
+              className="outline-button"
+              disabled={creatingPayment}
+              onClick={() => setCheckoutBooking(null)}
+            >
+              Thanh toán sau
+            </button>
+          </section>
+        </div>
+      )}
+
       <nav className="mobile-bottom-nav">
         {[
           { id: "home" as Page, label: "Trang chủ", icon: <Home /> },
@@ -270,10 +437,6 @@ export function CustomerDashboardPage() {
       {toast && <div className="toast"><CheckCircle2 size={18} />{toast}</div>}
     </div>
   );
-}
-
-function PageHeading({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: React.ReactNode }) {
-  return <div className="page-heading"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>;
 }
 
 function HomePage({ navigate, setSearch, stores, storesStatus, detectedAddress }: { navigate: (page: Page) => void; setSearch: (value: string) => void; stores: StoreItem[]; storesStatus: "loading" | "ready" | "error"; detectedAddress: string }) {
@@ -318,55 +481,6 @@ function HomePage({ navigate, setSearch, stores, storesStatus, detectedAddress }
     </section>
 
     <section className="bottom-cta"><div className="cta-spark cta-spark-one">✦</div><div className="cta-copy"><span className="eyebrow">BẮT ĐẦU NGAY HÔM NAY</span><h2>Để việc giặt giũ cho chúng tôi.</h2><p>Đặt lịch chỉ trong vài phút, nhận quần áo sạch thơm ngay tại nhà.</p><button className="white-button" onClick={() => navigate("booking")}>Đặt lịch giặt ngay <ArrowRight size={16} /></button></div><div className="cta-illustration"><div className="cta-shirt"><Shirt /></div><div className="cta-basket"><span /><span /><span /></div><div className="cta-spark cta-spark-two">✦</div></div></section>
-  </>;
-}
-
-function BookingPage(props: {
-  stores: StoreItem[];
-  step: number; setStep: (step: number) => void; selectedStore: number; setSelectedStore: (id: number) => void;
-  quantities: Record<number, number>; changeQuantity: (id: number, delta: number) => void; total: number;
-  pickupDate: string; setPickupDate: (date: string) => void; pickupTime: string; setPickupTime: (time: string) => void;
-  addresses: Address[]; addressesStatus: "loading" | "ready" | "error"; goToAddresses: () => void;
-  selectedAddress: number | null; setSelectedAddress: (id: number) => void; payment: string; setPayment: (payment: string) => void;
-  submitBooking: () => void; notify: (message: string) => void;
-}) {
-  const { stores, step, setStep, selectedStore, setSelectedStore, quantities, changeQuantity, total, pickupDate, setPickupDate, pickupTime, setPickupTime, addresses, addressesStatus, goToAddresses, selectedAddress, setSelectedAddress, payment, setPayment, submitBooking, notify } = props;
-  // Chưa chọn (hoặc địa chỉ đã bị xóa) thì dùng địa chỉ mặc định, không có thì địa chỉ đầu tiên
-  const activeAddress = addresses.find(item => item.id === selectedAddress) ?? addresses.find(item => item.isDefault) ?? addresses[0];
-  const [storeQuery, setStoreQuery] = useState("");
-  const selectedStoreData = stores.find(store => store.id === selectedStore) || stores[0];
-  const hasServices = Object.values(quantities).some(value => value > 0);
-  return <>
-    <PageHeading eyebrow="ĐẶT LỊCH ONLINE" title="Đặt lịch giặt của bạn" description="Chỉ vài bước đơn giản để quần áo sạch thơm được giao tận nhà." action={<div className="secure-note"><BadgeCheck size={17} /> Đặt lịch an toàn</div>} />
-    <div className="booking-layout">
-      <div className="booking-main">
-        <div className="stepper">{["Cửa hàng & dịch vụ", "Thời gian & địa chỉ", "Thanh toán"].map((label, index) => <div className={`stepper-item ${step === index + 1 ? "current" : ""} ${step > index + 1 ? "done" : ""}`} key={label}><span>{step > index + 1 ? <Check size={16} /> : index + 1}</span><div><small>BƯỚC {index + 1}</small><strong>{label}</strong></div>{index < 2 && <div className="step-line" />}</div>)}</div>
-
-        {step === 1 && <>
-          <div className="panel"><div className="panel-heading"><div><h2><MapPin /> Chọn cửa hàng</h2><p>Chọn cửa hàng thuận tiện cho việc lấy đồ.</p></div><span className="optional-tag">Bắt buộc</span></div><div className="input-with-icon store-search"><Search /><input value={storeQuery} onChange={e => setStoreQuery(e.target.value)} placeholder="Tìm cửa hàng hoặc khu vực..." /></div>
-            <div className="booking-store-list">{stores.filter(store => store.name.toLowerCase().includes(storeQuery.toLowerCase()) || store.address.toLowerCase().includes(storeQuery.toLowerCase())).map(store => <button key={store.id} className={`booking-store ${selectedStore === store.id ? "selected" : ""}`} onClick={() => setSelectedStore(store.id)}><span className="radio-dot">{selectedStore === store.id && <i />}</span><span className="store-mini-icon"><WashingMachine /></span><span className="booking-store-details"><strong>{store.name}</strong><small><MapPin size={12} /> {store.address}</small>{store.distance && <small><Truck size={12} /> {store.distance}{store.time ? ` · khoảng ${store.time}` : ""}</small>}</span>{store.rating !== undefined && <span className="booking-store-rating"><Star size={13} fill="currentColor" /> {store.rating}</span>}</button>)}</div>
-          </div>
-          <div className="panel"><div className="panel-heading"><div><h2><WashingMachine /> Chọn dịch vụ</h2><p>Chọn số lượng tương ứng với đồ cần giặt.</p></div></div><div className="booking-service-list">{services.map(service => <div className="booking-service" key={service.id}><span className={`booking-service-icon service-icon-${service.id}`}>{iconFor(service.icon)}</span><div className="booking-service-info"><strong>{service.name}</strong><small>{service.description}</small><span>{formatMoney(service.price)} / {service.unit}</span></div><div className="quantity-control"><button aria-label="Giảm số lượng" onClick={() => changeQuantity(service.id, -1)} disabled={!quantities[service.id]}><Minus size={14} /></button><span>{quantities[service.id] || 0}</span><button aria-label="Tăng số lượng" onClick={() => changeQuantity(service.id, 1)}><Plus size={14} /></button></div></div>)}</div></div>
-        </>}
-        {step === 2 && <div className="panel"><div className="panel-heading"><div><h2><CalendarDays /> Thời gian lấy đồ</h2><p>Chọn ngày và khung giờ phù hợp.</p></div></div><div className="form-grid"><label className="field-label">Ngày lấy đồ<input type="date" min={toLocalDateString(new Date())} value={pickupDate} onChange={e => { const date = e.target.value; setPickupDate(date); if (!isSlotAvailable(date, pickupTime)) { const slot = firstAvailableSlot(date); if (slot) setPickupTime(slot); } }} /></label><label className="field-label">Khung giờ<select value={pickupTime} onChange={e => setPickupTime(e.target.value)}>{PICKUP_SLOTS.map(slot => <option key={slot.label} value={slot.label} disabled={!isSlotAvailable(pickupDate, slot.label)}>{slot.label}</option>)}</select>{!firstAvailableSlot(pickupDate) && <small>Hôm nay đã hết khung giờ, vui lòng chọn ngày khác.</small>}</label></div><div className="panel-heading address-heading"><div><h2><MapPinned /> Địa chỉ giao nhận</h2><p>Shipper sẽ đến lấy đồ và giao lại tại địa chỉ này.</p></div><button className="text-link" onClick={goToAddresses}><Plus size={15} /> Thêm địa chỉ</button></div>{addressesStatus === "loading" && <p className="empty-summary">Đang tải địa chỉ...</p>}{addressesStatus === "error" && <p className="empty-summary">Không thể tải danh sách địa chỉ.</p>}{addressesStatus === "ready" && addresses.length === 0 && <p className="empty-summary">Bạn chưa có địa chỉ nào. Hãy thêm địa chỉ để tiếp tục đặt lịch.</p>}<div className="address-options">{addresses.map(item => <button key={item.id} className={`address-option ${activeAddress?.id === item.id ? "selected" : ""}`} onClick={() => setSelectedAddress(item.id)}><span className="radio-dot">{activeAddress?.id === item.id && <i />}</span>{item.label === "Nhà riêng" ? <Home /> : <MapPin />}<span><strong>{item.label}</strong><small>{item.recipientName} · {item.phone}</small><small>{formatAddress(item)}</small></span>{item.isDefault && <span className="default-tag">Mặc định</span>}</button>)}</div><label className="field-label note-field">Ghi chú cho shipper (không bắt buộc)<textarea placeholder="Ví dụ: gọi điện trước khi đến, giao tại sảnh..." rows={3} /></label></div>}
-        {step === 3 && <div className="panel"><div className="panel-heading"><div><h2><CreditCard /> Phương thức thanh toán</h2><p>Chọn cách thanh toán tiền cọc và phần còn lại.</p></div></div><div className="payment-options">{[{id:"vnpay",title:"VNPay",desc:"Quét mã QR hoặc ứng dụng ngân hàng",icon:"V"},{id:"momo",title:"Ví MoMo",desc:"Thanh toán nhanh qua ví điện tử",icon:"M"},{id:"cash",title:"Tiền mặt",desc:"Thanh toán với nhân viên giao nhận",icon:"₫"}].map(item => <button key={item.id} className={`payment-option ${payment === item.id ? "selected" : ""}`} onClick={() => setPayment(item.id)}><span className={`payment-logo payment-${item.id}`}>{item.icon}</span><span><strong>{item.title}</strong><small>{item.desc}</small></span><span className="radio-dot">{payment === item.id && <i />}</span></button>)}</div><div className="deposit-note"><WalletCards /><div><strong>Thanh toán tiền cọc</strong><p>Tiền cọc dự kiến là 20% giá trị đơn hàng. Cửa hàng sẽ xác nhận giá cuối cùng sau khi cân/kiểm tra đồ.</p></div></div><div className="booking-review"><h3>Thông tin đặt lịch</h3><div><span>Cửa hàng</span><strong>{selectedStoreData?.name ?? "Chưa chọn cửa hàng"}</strong></div><div><span>Ngày lấy đồ</span><strong>{pickupDate} · {pickupTime}</strong></div><div><span>Địa chỉ</span><strong>{activeAddress ? `${activeAddress.label}, ${formatAddress(activeAddress)}` : "Chưa chọn địa chỉ"}</strong></div></div></div>}
-        <div className="booking-actions">{step > 1 ? <button className="outline-button" onClick={() => setStep(step - 1)}>Quay lại</button> : <span className="booking-hint"><CheckCircle2 size={15} /> Không mất phí khi đặt lịch</span>}{step < 3 ? <button className="primary-button" disabled={(step === 1 && !hasServices) || (step === 2 && (!activeAddress || !isSlotAvailable(pickupDate, pickupTime)))} onClick={() => setStep(step + 1)}>Tiếp tục <ArrowRight size={16} /></button> : <button className="primary-button" onClick={submitBooking}><CheckCircle2 size={17} /> Xác nhận đặt lịch</button>}</div>
-      </div>
-      <aside className="booking-summary"><div className="summary-title"><h3>Tóm tắt đơn hàng</h3><span className="summary-bag"><Package /></span></div><div className="summary-store"><span className="summary-store-icon"><WashingMachine /></span><div><strong>{selectedStoreData?.name ?? "Chưa chọn cửa hàng"}</strong>{selectedStoreData?.distance && <small><MapPin size={12} /> {selectedStoreData.distance} từ vị trí của bạn</small>}</div></div><div className="summary-lines">{services.filter(service => quantities[service.id] > 0).map(service => <div className="summary-line" key={service.id}><span>{service.name} <small>× {quantities[service.id]}</small></span><strong>{formatMoney(service.price * quantities[service.id])}</strong></div>)}{!hasServices && <div className="empty-summary">Chọn dịch vụ để xem tạm tính.</div>}</div><div className="summary-coupon"><Tag /><input placeholder="Mã ưu đãi" /><button onClick={() => notify("Mã ưu đãi sẽ được kiểm tra khi kết nối backend.")}>Áp dụng</button></div><div className="summary-total"><span>Tạm tính</span><strong>{formatMoney(total)}</strong></div><div className="summary-total"><span>Phí giao nhận</span><strong className="free-text">{total >= 150000 ? "Miễn phí" : "15.000đ"}</strong></div><div className="summary-total"><span>Ưu đãi</span><strong className="discount-text">-{formatMoney(0)}</strong></div><div className="summary-grand"><span>Tổng tạm tính</span><strong>{formatMoney(total + (total > 0 && total < 150000 ? 15000 : 0))}</strong></div><div className="summary-footnote"><CheckCircle2 size={15} /> Giá cuối cùng được xác nhận sau khi cửa hàng kiểm tra đồ.</div><div className="summary-support"><CircleHelp /><span>Cần hỗ trợ?<strong>1900 1234</strong></span></div></aside>
-    </div>
-  </>;
-}
-
-function OrdersPage({ orders, search, setSearch, activeOrder, setActiveOrder, navigate }: { orders: typeof initialOrders; search: string; setSearch: (v: string) => void; activeOrder: string | null; setActiveOrder: (v: string | null) => void; navigate: (p: Page) => void }) {
-  const [filter, setFilter] = useState("Tất cả");
-  const tabs = ["Tất cả", "Đang xử lý", "Sẵn sàng giao", "Hoàn thành", "Đã hủy"];
-  const filtered = orders.filter(order => filter === "Tất cả" || (filter === "Đang xử lý" && ["Đang xác nhận", "Đang giặt"].includes(order.status)) || order.status === filter);
-  const order = orders.find(item => item.code === activeOrder);
-  if (order) return <><PageHeading eyebrow="LỊCH SỬ ĐẶT HÀNG" title={`Đơn hàng #${order.code}`} description="Theo dõi tiến trình và xem chi tiết đơn hàng của bạn." action={<button className="outline-button" onClick={() => setActiveOrder(null)}>← Quay lại danh sách</button>} /><div className="order-detail-layout"><div className="panel order-tracking-panel"><div className="tracking-top"><div><span className={`status-pill ${statusClass(order.status)}`}><i />{order.status}</span><h2>Đơn hàng của bạn đang được xử lý</h2><p>Cập nhật trạng thái theo thời gian thực khi kết nối hệ thống.</p></div><div className="tracking-illustration"><Package /></div></div><div className="tracking-timeline">{[{title:"Đặt lịch thành công",date:order.date,done:true},{title:"Cửa hàng xác nhận",date:"Đang cập nhật",done:order.status !== "Đang xác nhận"},{title:"Đang giặt & chăm sóc",date:order.status === "Đang giặt" ? "Đang thực hiện" : "Chờ xử lý",done:["Sẵn sàng giao","Hoàn thành"].includes(order.status) || order.status === "Đang giặt"},{title:"Đang giao đến bạn",date:order.status === "Sẵn sàng giao" ? "Sẵn sàng giao" : "Chờ xử lý",done:order.status === "Sẵn sàng giao" || order.status === "Hoàn thành"},{title:"Hoàn thành",date:order.status === "Hoàn thành" ? "Đã hoàn tất" : "Chờ xử lý",done:order.status === "Hoàn thành"}].map((item, i) => <div className={`timeline-item ${item.done ? "done" : ""}`} key={item.title}><span className="timeline-marker">{item.done ? <Check size={13} /> : i + 1}</span><div><strong>{item.title}</strong><small>{item.date}</small></div></div>)}</div></div><div className="panel"><h2 className="panel-title-text">Thông tin đơn hàng</h2><div className="detail-row"><span>Mã đơn hàng</span><strong>{order.code}</strong></div><div className="detail-row"><span>Cửa hàng</span><strong>{order.store}</strong></div><div className="detail-row"><span>Dịch vụ</span><strong>{order.service}</strong></div><div className="detail-row"><span>Ngày đặt</span><strong>{order.date}</strong></div><div className="detail-row total-row"><span>Tổng tiền tạm tính</span><strong>{formatMoney(order.total)}</strong></div><button className="primary-button full-button" onClick={() => navigate("booking")}>Đặt đơn mới <ArrowRight size={16} /></button></div></div></>;
-  return <>
-    <PageHeading eyebrow="QUẢN LÝ ĐƠN HÀNG" title="Đơn hàng của tôi" description="Theo dõi tình trạng giặt ủi và xem lại các đơn hàng trước đây." action={<button className="primary-button" onClick={() => navigate("booking")}><Plus size={17} /> Đặt lịch mới</button>} />
-    <div className="order-stats"><div><span className="stat-icon stat-blue"><Package /></span><div><small>Tổng đơn hàng</small><strong>{orders.length}</strong></div></div><div><span className="stat-icon stat-orange"><Clock3 /></span><div><small>Đang xử lý</small><strong>{orders.filter(o => ["Đang xác nhận","Đang giặt"].includes(o.status)).length}</strong></div></div><div><span className="stat-icon stat-purple"><Truck /></span><div><small>Sẵn sàng giao</small><strong>{orders.filter(o => o.status === "Sẵn sàng giao").length}</strong></div></div><div><span className="stat-icon stat-green"><CheckCircle2 /></span><div><small>Hoàn thành</small><strong>{orders.filter(o => o.status === "Hoàn thành").length}</strong></div></div></div>
-    <div className="panel orders-panel"><div className="orders-toolbar"><div className="filter-tabs">{tabs.map(tab => <button key={tab} className={filter === tab ? "active" : ""} onClick={() => setFilter(tab)}>{tab}</button>)}</div><div className="orders-search"><Search /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm mã đơn, cửa hàng..." /><button aria-label="Bộ lọc"><SlidersHorizontal size={16} /></button></div></div><div className="table-wrap"><table><thead><tr><th>MÃ ĐƠN HÀNG</th><th>NGÀY ĐẶT</th><th>DỊCH VỤ / CỬA HÀNG</th><th>TRẠNG THÁI</th><th>TỔNG TIỀN</th><th></th></tr></thead><tbody>{filtered.map(item => <tr key={item.code}><td><strong className="order-code">{item.code}</strong></td><td>{item.date}</td><td><strong>{item.service}</strong><small className="table-subtitle">{item.store}</small></td><td><span className={`status-pill ${statusClass(item.status)}`}><i />{item.status}</span></td><td><strong>{formatMoney(item.total)}</strong></td><td><button className="table-action" onClick={() => setActiveOrder(item.code)}>Chi tiết <ChevronRight size={14} /></button></td></tr>)}</tbody></table>{filtered.length === 0 && <div className="empty-state"><Package /><strong>Không tìm thấy đơn hàng</strong><p>Thử từ khóa khác hoặc chọn trạng thái khác.</p></div>}</div><div className="table-footer"><span>Hiển thị {filtered.length} / {orders.length} đơn hàng</span><button className="text-link" onClick={() => { setSearch(""); }}>Xóa tìm kiếm</button></div></div>
   </>;
 }
 

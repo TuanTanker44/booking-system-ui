@@ -1843,6 +1843,8 @@ svg {
 .field-label input,
 .field-label select,
 .field-label textarea {
+  /* index.css bật color-scheme dark nên mũi tên tăng/giảm, icon lịch... bị vẽ tối trên nền trắng */
+  color-scheme: light;
   width: 100%;
   border: 1px solid #e1e9f3;
   background: #fff;
@@ -2293,7 +2295,9 @@ td small.table-subtitle {
 }
 .tracking-timeline {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* Số cột theo số bước (4 bước tại cửa hàng, 7 bước giao tận nơi), luôn nằm trên một hàng */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   margin-top: 35px;
 }
 .timeline-item {
@@ -2341,6 +2345,7 @@ td small.table-subtitle {
   font-size: 8px;
   color: #4a5f7b;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .timeline-item > div small {
   font-size: 8px;
@@ -3520,4 +3525,654 @@ td small.table-subtitle {
   .topbar .breadcrumb {
     display: none;
   }
+}
+
+/* ---- Đặt lịch theo API: danh sách món, hình thức, khung giờ, hủy đơn ---- */
+.item-rows {
+  display: grid;
+  gap: 10px;
+}
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.item-row > input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #e1e9f3;
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  color: #314965;
+  font-size: 10px;
+  outline: 0;
+}
+.item-row > input:focus {
+  border-color: #83baff;
+}
+.mode-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.mode-toggle button {
+  flex: 1 1 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid #e1e9f3;
+  border-radius: 10px;
+  background: #fff;
+  color: #536984;
+  font-size: 11px;
+  font-weight: 700;
+}
+.mode-toggle button.active {
+  border-color: #68a9ff;
+  background: #f5faff;
+  color: #0878f9;
+}
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.slot-chip {
+  display: grid;
+  gap: 3px;
+  padding: 10px 8px;
+  border: 1px solid #e1e9f3;
+  border-radius: 10px;
+  background: #fff;
+  color: #314965;
+  text-align: center;
+}
+.slot-chip strong {
+  font-size: 11px;
+}
+.slot-chip small {
+  font-size: 9px;
+  color: #8595aa;
+}
+.slot-chip.selected {
+  border-color: #68a9ff;
+  background: #f5faff;
+  box-shadow: 0 0 0 2px #0878f90a;
+}
+.slot-chip:disabled {
+  background: #f8fafd;
+  color: #a9b6c7;
+  cursor: not-allowed;
+}
+.cancel-box {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.danger-button {
+  background: #e5484d;
+  border-color: #e5484d;
+}
+
+.payment-result {
+  min-height: 100vh;
+  background: #f3f8ff;
+  color: #142d52;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.payment-header {
+  min-height: 76px;
+  padding: 0 7%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: #fff;
+  border-bottom: 1px solid #e8eef7;
+}
+
+.payment-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #142d52;
+  font-size: 20px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.payment-brand-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: #fff;
+  background: #3478f6;
+}
+
+.payment-nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.payment-nav a {
+  color: #526887;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.payment-nav a:hover {
+  color: #3478f6;
+}
+
+.payment-card {
+  width: min(680px, calc(100% - 32px));
+  margin: 44px auto;
+  padding: 44px 48px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid #e9eff7;
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgb(35 72 120 / 6%);
+  text-align: center;
+}
+
+.payment-status-icon {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 48px;
+  font-weight: 700;
+}
+
+.payment-status-icon.success {
+  color: #fff;
+  background: #43c681;
+}
+
+.payment-status-icon.failed {
+  color: #fff;
+  background: #ef6262;
+}
+
+.payment-status-icon.pending {
+  color: #fff;
+  background: #f0ad3d;
+}
+
+.payment-card h1 {
+  margin: 0 0 12px;
+  font-size: clamp(25px, 4vw, 34px);
+  line-height: 1.3;
+}
+
+.payment-description {
+  max-width: 480px;
+  margin: 0 auto 28px;
+  color: #657b9b;
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.payment-details {
+  padding: 20px 24px;
+  border: 1px solid #dbe8f8;
+  border-radius: 12px;
+  background: #f7faff;
+  text-align: left;
+}
+
+.payment-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 0;
+  font-size: 14px;
+}
+
+.payment-detail-row + .payment-detail-row {
+  border-top: 1px solid #e8eef7;
+}
+
+.payment-detail-row > span:first-child {
+  color: #657b9b;
+}
+
+.payment-detail-row strong {
+  max-width: 60%;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.payment-badge {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.payment-badge.success {
+  color: #16834b;
+  background: #d9f8e7;
+}
+
+.payment-badge.failed {
+  color: #bd3333;
+  background: #ffebeb;
+}
+
+.payment-badge.pending {
+  color: #946200;
+  background: #fff1cc;
+}
+
+.payment-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.payment-button {
+  min-height: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.payment-button:hover {
+  transform: translateY(-1px);
+}
+
+.payment-button.primary {
+  color: #fff;
+  background: #3478f6;
+}
+
+.payment-button.primary:hover {
+  background: #2564d9;
+}
+
+.payment-button.secondary {
+  color: #3478f6;
+  background: #fff;
+  border-color: #cbdaf0;
+}
+
+.payment-button.secondary:hover {
+  background: #f4f8ff;
+}
+
+.payment-support {
+  margin-top: 28px;
+  color: #7587a1;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+@media (max-width: 600px) {
+  .payment-header {
+    padding: 16px;
+  }
+
+  .payment-brand {
+    font-size: 16px;
+  }
+
+  .payment-nav {
+    display: none;
+  }
+
+  .payment-card {
+    margin: 24px auto;
+    padding: 32px 20px;
+  }
+
+  .payment-status-icon {
+    width: 72px;
+    height: 72px;
+    font-size: 40px;
+  }
+
+  .payment-details {
+    padding: 12px 14px;
+  }
+
+  .payment-detail-row {
+    gap: 12px;
+    font-size: 13px;
+  }
+}
+
+/* Cột trái của chi tiết đơn: panel theo dõi đơn + giao diện thanh toán ngay bên dưới */
+.order-main-column {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.checkout-card {
+  width: 100%;
+  padding: 32px;
+  color: #17345d;
+  box-sizing: border-box;
+  border: 1px solid #e4ebf5;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgb(30 64 110 / 7%);
+}
+
+.checkout-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: #54708f;
+  cursor: pointer;
+}
+
+.checkout-heading {
+  margin: 24px 0;
+  text-align: center;
+}
+
+.checkout-eyebrow {
+  color: #3478f6;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.checkout-heading h1 {
+  margin: 12px 0;
+  font-size: 28px;
+}
+
+.checkout-heading p {
+  color: #71829a;
+  line-height: 1.7;
+}
+
+.checkout-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px;
+  border: 1px solid #dce9fb;
+  border-radius: 12px;
+  background: #f5f9ff;
+}
+
+.checkout-amount > span:first-child {
+  color: #71829a;
+  font-size: 14px;
+}
+
+.checkout-amount > strong {
+  color: #2868df;
+  font-size: 30px;
+}
+
+.checkout-method {
+  color: #657b9b;
+  font-size: 13px;
+}
+
+.checkout-qr {
+  margin: 24px 0;
+  text-align: center;
+}
+
+.checkout-qr-frame {
+  position: relative;
+  width: min(240px, 100%);
+  aspect-ratio: 1;
+  margin: 0 auto 14px;
+  padding: 10px;
+  box-sizing: border-box;
+  border: 1px solid #e7edf5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.checkout-qr-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: opacity 0.2s;
+}
+
+.checkout-qr-frame.is-inactive img {
+  opacity: 0.12;
+}
+
+.checkout-qr-cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.checkout-qr-paid {
+  color: #12946b;
+}
+
+.checkout-qr-failed,
+.checkout-qr-expired {
+  color: #b54747;
+}
+
+.checkout-waiting {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+}
+
+.checkout-qr p,
+.checkout-no-qr p {
+  color: #657b9b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.checkout-no-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 24px 0;
+  padding: 16px;
+  border-radius: 10px;
+  background: #f7f9fc;
+  color: #657b9b;
+  text-align: center;
+}
+
+.checkout-no-qr p {
+  margin: 0;
+}
+
+.checkout-expiry strong {
+  color: #2868df;
+  font-variant-numeric: tabular-nums;
+}
+
+.checkout-expiry {
+  margin: 16px 0;
+  color: #75849a;
+  font-size: 13px;
+  text-align: center;
+}
+
+.checkout-pay-button {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 10px;
+  background: #3478f6;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.checkout-pay-button:hover:not(:disabled) {
+  background: #2564d9;
+}
+
+.checkout-pay-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.checkout-spinner {
+  animation: checkout-spin 1s linear infinite;
+}
+
+.checkout-warning {
+  color: #b54747;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.checkout-note {
+  margin-top: 20px;
+  color: #7c8ba1;
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+@keyframes checkout-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 480px) {
+  .checkout-card {
+    padding: 22px 18px;
+  }
+
+  .checkout-heading h1 {
+    font-size: 24px;
+  }
+}
+
+/* ---- Hộp thoại chọn phương thức thanh toán sau khi đặt lịch ---- */
+.payment-method-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #17375d66;
+}
+
+.payment-method-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  display: grid;
+  gap: 12px;
+  padding: 28px 24px 24px;
+  box-sizing: border-box;
+  border-radius: 16px;
+  background: #fff;
+  color: #17345d;
+  box-shadow: 0 20px 50px #17375d40;
+}
+
+.payment-method-dialog > .icon-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.payment-method-dialog h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.payment-method-dialog p {
+  margin: 0 0 4px;
+  color: #71829a;
+  font-size: 14px;
+}
+
+.payment-method-dialog .payment-method-error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fdeeee;
+  color: #b54747;
+  font-size: 13px;
+  white-space: pre-line;
+}
+
+.payment-method-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  border: 1px solid #e1e9f3;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.payment-method-option input {
+  /* index.css bật color-scheme dark nên radio bị vẽ trắng trên nền trắng */
+  color-scheme: light;
+  accent-color: #3478f6;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.payment-method-option:has(input:checked) {
+  border-color: #3478f6;
+  background: #f5f9ff;
+}
+
+.payment-method-dialog .primary-button,
+.payment-method-dialog .outline-button {
+  min-height: 44px;
+  font-size: 13px;
 }

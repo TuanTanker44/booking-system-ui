@@ -15,7 +15,8 @@ import {
   type SearchEntryType,
   type SearchResult,
 } from "../../lib/search";
-import { searchStores, type ApiStore } from "../../services/store";
+import { searchStores } from "../../services/store";
+import type { ApiStore } from "../../types/store";
 import "./GlobalSearch.css";
 
 const GROUPS: { type: SearchEntryType; label: string; icon: React.ReactNode }[] =

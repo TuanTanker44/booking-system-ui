@@ -3,13 +3,13 @@ import { ForbiddenPage } from '../pages/common/ForbiddenPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { NotFoundPage } from '../pages/common/NotFoundPage';
 import UserManagementPage from '../pages/admin/UserManagementPage';
-import HomePage from '../pages/common/HomePage';
 import { ProtectedRoute, PublicRoute } from './guards';
 import { CustomerDashboardPage } from '../pages/customer/CustomerDashboardPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
 import { EmailVerificationPage } from "../pages/auth/EmailVerificationPage";
 import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
 import { StaffDashboardPage } from '../pages/staff/StaffDashboardPage';
+import { PaymentResultPage } from "../pages/customer/PaymentResultPage";
 
 // Có token trên URL (link từ email) thì xác minh, không thì hiện màn nhắc kiểm tra email
 function VerifyEmailRoute() {
@@ -46,7 +46,7 @@ export function AppRouter() {
         <Route path="/verify-email" element={<VerifyEmailRoute />} />
       </Route>
 
-      <Route path="/home" element={<HomePage />} />
+      <Route path="/payment/result" element={<PaymentResultPage />} />
       <Route path="/forbidden" element={<ForbiddenPage />} />
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="*" element={<NotFoundPage />} />
