@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
 import { ForbiddenPage } from '../pages/common/ForbiddenPage';
 import { LoginPage } from '../pages/auth/LoginPage';
+import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
 import { NotFoundPage } from '../pages/common/NotFoundPage';
 import { HelpSupportPage } from '../pages/common/HelpSupportPage';
 import UserManagementPage from '../pages/admin/UserManagementPage';
@@ -45,6 +46,7 @@ export function AppRouter() {
       
       <Route element={<PublicRoute />}>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify-email" element={<VerifyEmailRoute />} />
       </Route>
