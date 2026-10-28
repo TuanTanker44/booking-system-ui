@@ -2,6 +2,7 @@ import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom';
 import { ForbiddenPage } from '../pages/common/ForbiddenPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { NotFoundPage } from '../pages/common/NotFoundPage';
+import { HelpSupportPage } from '../pages/common/HelpSupportPage';
 import UserManagementPage from '../pages/admin/UserManagementPage';
 import { ProtectedRoute, PublicRoute } from './guards';
 import { CustomerDashboardPage } from '../pages/customer/CustomerDashboardPage';
@@ -25,6 +26,8 @@ function VerifyEmailRoute() {
 export function AppRouter() {
   return (
     <Routes>
+      <Route path="/help" element={<HelpSupportPage />} />
+
       <Route element={<ProtectedRoute roles={['ADMIN']} />}>
         <Route path="/admin/users" element={<UserManagementPage />}/>
         <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
