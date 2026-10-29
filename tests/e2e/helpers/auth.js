@@ -1,7 +1,7 @@
 import { BASE_URL, API_URL, waitForVisible, By, until } from './driver.js';
 
-export const TEST_EMAIL = process.env.TEST_EMAIL || 'tuanfafbfc@gmail.com';
-export const TEST_PASSWORD = process.env.TEST_PASSWORD || 'Tu@n3012';
+export const TEST_EMAIL = process.env.TEST_EMAIL;
+export const TEST_PASSWORD = process.env.TEST_PASSWORD;
 
 export async function login(driver, email = TEST_EMAIL, password = TEST_PASSWORD) {
   await driver.get(`${BASE_URL}/login`);
