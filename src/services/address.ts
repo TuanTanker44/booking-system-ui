@@ -48,7 +48,18 @@ export const AddressService = {
   },
 
   async create(input: AddressInput): Promise<void> {
-    await axiosInstance.post("/addresses", toApiBody(input));
+    const { latitude, longitude } = input;
+    const hasCoordinates = latitude != null && longitude != null;
+    if (hasCoordinates && (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180)) {
+      throw new Error("Tọa độ không hợp lệ.");
+    }
+    if ((latitude != null) !== (longitude != null)) {
+      throw new Error("Vui lòng nhập đủ vĩ độ và kinh độ.");
+    }
+    await axiosInstance.post("/addresses", {
+      ...toApiBody(input),
+      ...(hasCoordinates ? { lat: latitude, long: longitude } : {}),
+    });
   },
 
   async update(id: number, input: AddressInput): Promise<void> {

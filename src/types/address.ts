@@ -37,4 +37,6 @@ export interface AddressInput {
   district: string;
   city: string;
   isDefault: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
 }
