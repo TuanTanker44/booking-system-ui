@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Plus,
@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 
 import AdminLayout from "../../components/admin/AdminLayout";
+import axiosInstance from "../../lib/axios";
 import type {
+  ApiUser,
   User,
   UserRole,
   UserStatus,
@@ -72,8 +74,8 @@ const initialUsers: User[] = [
     fullName: "Vũ Đức Long",
     email: "duclong@example.com",
     phone: "0956789012",
-    role: "STAFF",
-    status: "INACTIVE",
+    role: "SHIPPER",
+    status: "ACTIVE",
     createdAt: "2026-09-08",
   },
 ];
@@ -92,6 +94,30 @@ const statusLabels: Record<UserStatus, string> = {
   PENDING: "Đang chờ",
 };
 
+function mapApiUserToUser(apiUser: ApiUser): User {
+  const roleMap: Record<ApiUser["role"], UserRole> = {
+    admin: "ADMIN",
+    laundry_staff: "STAFF",
+    shipper: "SHIPPER",
+    customer: "CUSTOMER",
+  };
+  const statusMap: Record<ApiUser["status"], UserStatus> = {
+    active: "ACTIVE",
+    inactive: "INACTIVE",
+    banned: "BANNED",
+  };
+
+  return {
+    id: apiUser.id,
+    fullName: apiUser.full_name || "Chưa đặt tên",
+    email: apiUser.email,
+    phone: apiUser.phone || "—",
+    role: roleMap[apiUser.role] ?? "CUSTOMER",
+    status: statusMap[apiUser.status] ?? "ACTIVE",
+    createdAt: apiUser.created_at ? apiUser.created_at.slice(0, 10) : "2026-10-01",
+  };
+}
+
 export default function UserManagementPage() {
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [search, setSearch] = useState("");
@@ -100,6 +126,30 @@ export default function UserManagementPage() {
   const [page, setPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [menuUserId, setMenuUserId] = useState<number | null>(null);
+
+  // Modal tạo user mới
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    role: "STAFF" as UserRole,
+    status: "ACTIVE" as UserStatus,
+  });
+
+  useEffect(() => {
+    axiosInstance
+      .get("/users")
+      .then(({ data }) => {
+        const rawList: ApiUser[] = Array.isArray(data) ? data : data?.data;
+        if (Array.isArray(rawList) && rawList.length > 0) {
+          setUsers(rawList.map(mapApiUserToUser));
+        }
+      })
+      .catch(() => {
+        // Fallback giữ initialUsers khi chưa bật server backend
+      });
+  }, []);
 
   const pageSize = 5;
 
@@ -112,22 +162,14 @@ export default function UserManagementPage() {
         user.email.toLowerCase().includes(keyword) ||
         user.phone.includes(keyword);
 
-      const matchesRole =
-        roleFilter === "ALL" || user.role === roleFilter;
-
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        user.status === statusFilter;
+      const matchesRole = roleFilter === "ALL" || user.role === roleFilter;
+      const matchesStatus = statusFilter === "ALL" || user.status === statusFilter;
 
       return matchesSearch && matchesRole && matchesStatus;
     });
   }, [users, search, roleFilter, statusFilter]);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredUsers.length / pageSize),
-  );
-
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const currentPage = Math.min(page, totalPages);
 
   const paginatedUsers = filteredUsers.slice(
@@ -135,50 +177,63 @@ export default function UserManagementPage() {
     currentPage * pageSize,
   );
 
-  const activeCount = users.filter(
-    (user) => user.status === "ACTIVE",
-  ).length;
-
+  const activeCount = users.filter((user) => user.status === "ACTIVE").length;
   const staffCount = users.filter(
-    (user) => user.role === "STAFF",
+    (user) => user.role === "STAFF" || user.role === "SHIPPER",
   ).length;
+  const customerCount = users.filter((user) => user.role === "CUSTOMER").length;
 
-  const customerCount = users.filter(
-    (user) => user.role === "CUSTOMER",
-  ).length;
+  function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newUserForm.fullName.trim() || !newUserForm.email.trim()) return;
+
+    const created: User = {
+      id: Date.now(),
+      fullName: newUserForm.fullName.trim(),
+      email: newUserForm.email.trim(),
+      phone: newUserForm.phone.trim() || "—",
+      role: newUserForm.role,
+      status: newUserForm.status,
+      createdAt: new Date().toISOString().slice(0, 10),
+    };
+
+    setUsers((prev) => [created, ...prev]);
+    setIsCreateOpen(false);
+    setNewUserForm({
+      fullName: "",
+      email: "",
+      phone: "",
+      role: "STAFF",
+      status: "ACTIVE",
+    });
+  }
 
   function toggleStatus(user: User) {
     const nextStatus: UserStatus =
       user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
 
     const confirmed = window.confirm(
-      `${nextStatus === "INACTIVE" ? "Chưa kích hoạt" : "Kích hoạt"} tài khoản ${user.fullName}?`,
+      `${nextStatus === "INACTIVE" ? "Khóa / Ngừng kích hoạt" : "Mở khóa"} tài khoản ${user.fullName}?`,
     );
 
     if (!confirmed) return;
 
     setUsers((previous) =>
       previous.map((item) =>
-        item.id === user.id
-          ? { ...item, status: nextStatus }
-          : item,
+        item.id === user.id ? { ...item, status: nextStatus } : item,
       ),
     );
-
     setMenuUserId(null);
   }
 
   function deleteUser(user: User) {
     const confirmed = window.confirm(
-      `Bạn có chắc muốn xóa user ${user.fullName}?`,
+      `Bạn có chắc muốn xóa người dùng ${user.fullName}?`,
     );
 
     if (!confirmed) return;
 
-    setUsers((previous) =>
-      previous.filter((item) => item.id !== user.id),
-    );
-
+    setUsers((previous) => previous.filter((item) => item.id !== user.id));
     setMenuUserId(null);
   }
 
@@ -192,15 +247,13 @@ export default function UserManagementPage() {
               Quản lý người dùng
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Quản lý tài khoản, vai trò và trạng thái người dùng.
+              Quản lý tài khoản, vai trò và trạng thái người dùng toàn hệ thống.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={() =>
-              alert("Tích hợp form tạo user tại đây.")
-            }
+            onClick={() => setIsCreateOpen(true)}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
           >
             <Plus size={18} />
@@ -216,23 +269,20 @@ export default function UserManagementPage() {
             icon={<Users size={21} />}
             iconClass="bg-blue-50 text-blue-600"
           />
-
           <StatCard
             label="Đang hoạt động"
             value={activeCount}
             icon={<UserCheck size={21} />}
             iconClass="bg-emerald-50 text-emerald-600"
           />
-
           <StatCard
             label="Khách hàng"
             value={customerCount}
             icon={<Users size={21} />}
             iconClass="bg-violet-50 text-violet-600"
           />
-
           <StatCard
-            label="Nhân viên"
+            label="Nhân viên & Shipper"
             value={staffCount}
             icon={<ShieldCheck size={21} />}
             iconClass="bg-amber-50 text-amber-600"
@@ -246,7 +296,7 @@ export default function UserManagementPage() {
               Danh sách người dùng
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Tìm kiếm và quản lý tài khoản trong hệ thống.
+              Tìm kiếm và phân quyền tài khoản trong hệ thống.
             </p>
 
             <div className="mt-5 flex flex-col gap-3 lg:flex-row">
@@ -255,7 +305,6 @@ export default function UserManagementPage() {
                   size={18}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                 />
-
                 <input
                   value={search}
                   onChange={(event) => {
@@ -278,6 +327,7 @@ export default function UserManagementPage() {
                 <option value="ALL">Tất cả vai trò</option>
                 <option value="ADMIN">Admin</option>
                 <option value="STAFF">Nhân viên</option>
+                <option value="SHIPPER">Shipper</option>
                 <option value="CUSTOMER">Khách hàng</option>
               </select>
 
@@ -291,7 +341,9 @@ export default function UserManagementPage() {
               >
                 <option value="ALL">Tất cả trạng thái</option>
                 <option value="ACTIVE">Hoạt động</option>
-                <option value="LOCKED">Bị khóa</option>
+                <option value="INACTIVE">Chưa kích hoạt</option>
+                <option value="BANNED">Bị cấm</option>
+                <option value="PENDING">Đang chờ</option>
               </select>
             </div>
           </div>
@@ -305,18 +357,13 @@ export default function UserManagementPage() {
                   <th className="px-5 py-4 font-semibold">Vai trò</th>
                   <th className="px-5 py-4 font-semibold">Trạng thái</th>
                   <th className="px-5 py-4 font-semibold">Ngày tạo</th>
-                  <th className="px-5 py-4 text-right font-semibold">
-                    Thao tác
-                  </th>
+                  <th className="px-5 py-4 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100">
                 {paginatedUsers.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="transition hover:bg-slate-50"
-                  >
+                  <tr key={user.id} className="transition hover:bg-slate-50">
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-blue-50 font-semibold text-blue-700">
@@ -326,7 +373,6 @@ export default function UserManagementPage() {
                             .map((part) => part[0])
                             .join("")}
                         </div>
-
                         <div>
                           <p className="font-semibold text-slate-800">
                             {user.fullName}
@@ -338,9 +384,7 @@ export default function UserManagementPage() {
                       </div>
                     </td>
 
-                    <td className="px-5 py-4 text-slate-600">
-                      {user.phone}
-                    </td>
+                    <td className="px-5 py-4 text-slate-600">{user.phone}</td>
 
                     <td className="px-5 py-4">
                       <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
@@ -350,37 +394,32 @@ export default function UserManagementPage() {
 
                     <td className="px-5 py-4">
                       <span
-                        className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${
-                          user.status === "ACTIVE"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-red-50 text-red-700"
-                        }`}
+                        className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium ${user.status === "ACTIVE"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-red-50 text-red-700"
+                          }`}
                       >
                         <span
-                          className={`size-1.5 rounded-full ${
-                            user.status === "ACTIVE"
-                              ? "bg-emerald-500"
-                              : "bg-red-500"
-                          }`}
+                          className={`size-1.5 rounded-full ${user.status === "ACTIVE"
+                            ? "bg-emerald-500"
+                            : "bg-red-500"
+                            }`}
                         />
                         {statusLabels[user.status]}
                       </span>
                     </td>
 
                     <td className="px-5 py-4 text-slate-600">
-                      {new Date(
-                        user.createdAt + "T00:00:00",
-                      ).toLocaleDateString("vi-VN")}
+                      {new Date(user.createdAt + "T00:00:00").toLocaleDateString(
+                        "vi-VN",
+                      )}
                     </td>
 
                     <td className="relative px-5 py-4 text-right">
                       <button
                         type="button"
-                        aria-label={`Thao tác với ${user.fullName}`}
                         onClick={() =>
-                          setMenuUserId(
-                            menuUserId === user.id ? null : user.id,
-                          )
+                          setMenuUserId(menuUserId === user.id ? null : user.id)
                         }
                         className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                       >
@@ -432,14 +471,8 @@ export default function UserManagementPage() {
 
                 {paginatedUsers.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-5 py-16 text-center"
-                    >
-                      <Users
-                        size={32}
-                        className="mx-auto text-slate-300"
-                      />
+                    <td colSpan={6} className="px-5 py-16 text-center">
+                      <Users size={32} className="mx-auto text-slate-300" />
                       <p className="mt-3 font-medium text-slate-700">
                         Không tìm thấy người dùng
                       </p>
@@ -470,9 +503,7 @@ export default function UserManagementPage() {
               <button
                 type="button"
                 disabled={currentPage === 1}
-                onClick={() =>
-                  setPage((previous) => Math.max(1, previous - 1))
-                }
+                onClick={() => setPage((previous) => Math.max(1, previous - 1))}
                 className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <ChevronLeft size={18} />
@@ -486,9 +517,7 @@ export default function UserManagementPage() {
                 type="button"
                 disabled={currentPage >= totalPages}
                 onClick={() =>
-                  setPage((previous) =>
-                    Math.min(totalPages, previous + 1),
-                  )
+                  setPage((previous) => Math.min(totalPages, previous + 1))
                 }
                 className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -498,6 +527,132 @@ export default function UserManagementPage() {
           </div>
         </section>
       </div>
+
+      {/* Modal Tạo người dùng */}
+      {isCreateOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          onClick={() => setIsCreateOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-slate-900">
+              Thêm người dùng mới
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Tạo nhanh tài khoản cho nhân viên, shipper hoặc khách hàng.
+            </p>
+
+            <form onSubmit={handleCreateUser} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">
+                  Họ và tên *
+                </label>
+                <input
+                  required
+                  value={newUserForm.fullName}
+                  onChange={(e) =>
+                    setNewUserForm({ ...newUserForm, fullName: e.target.value })
+                  }
+                  placeholder="VD: Nguyễn Văn A"
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={newUserForm.email}
+                  onChange={(e) =>
+                    setNewUserForm({ ...newUserForm, email: e.target.value })
+                  }
+                  placeholder="example@laundry.vn"
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">
+                  Số điện thoại
+                </label>
+                <input
+                  value={newUserForm.phone}
+                  onChange={(e) =>
+                    setNewUserForm({ ...newUserForm, phone: e.target.value })
+                  }
+                  placeholder="0912345678"
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Vai trò
+                  </label>
+                  <select
+                    value={newUserForm.role}
+                    onChange={(e) =>
+                      setNewUserForm({
+                        ...newUserForm,
+                        role: e.target.value as UserRole,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="STAFF">Nhân viên (Staff)</option>
+                    <option value="SHIPPER">Shipper</option>
+                    <option value="CUSTOMER">Khách hàng</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Trạng thái
+                  </label>
+                  <select
+                    value={newUserForm.status}
+                    onChange={(e) =>
+                      setNewUserForm({
+                        ...newUserForm,
+                        status: e.target.value as UserStatus,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="ACTIVE">Hoạt động</option>
+                    <option value="INACTIVE">Chưa kích hoạt</option>
+                    <option value="PENDING">Đang chờ</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Tạo tài khoản
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* User detail modal */}
       {selectedUser && (
@@ -519,7 +674,6 @@ export default function UserManagementPage() {
               >
                 Chi tiết người dùng
               </h2>
-
               <button
                 type="button"
                 onClick={() => setSelectedUser(null)}
@@ -531,27 +685,15 @@ export default function UserManagementPage() {
 
             <div className="mt-6 space-y-4">
               <DetailRow label="ID" value={String(selectedUser.id)} />
-              <DetailRow
-                label="Họ và tên"
-                value={selectedUser.fullName}
-              />
+              <DetailRow label="Họ và tên" value={selectedUser.fullName} />
               <DetailRow label="Email" value={selectedUser.email} />
-              <DetailRow
-                label="Số điện thoại"
-                value={selectedUser.phone}
-              />
-              <DetailRow
-                label="Vai trò"
-                value={roleLabels[selectedUser.role]}
-              />
+              <DetailRow label="Số điện thoại" value={selectedUser.phone} />
+              <DetailRow label="Vai trò" value={roleLabels[selectedUser.role]} />
               <DetailRow
                 label="Trạng thái"
                 value={statusLabels[selectedUser.status]}
               />
-              <DetailRow
-                label="Ngày tạo"
-                value={selectedUser.createdAt}
-              />
+              <DetailRow label="Ngày tạo" value={selectedUser.createdAt} />
             </div>
           </div>
         </div>
@@ -585,13 +727,7 @@ function StatCard({
   );
 }
 
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1 border-b border-slate-100 pb-3 sm:flex-row sm:justify-between">
       <span className="text-sm text-slate-500">{label}</span>

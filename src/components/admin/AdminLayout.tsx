@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Bell, UserCircle } from "lucide-react";
 import AdminSidebar from "./AdminSideBar";
+import { useUserStore } from "../../stores/user";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -9,6 +10,8 @@ interface AdminLayoutProps {
 export default function AdminLayout({
   children,
 }: AdminLayoutProps) {
+  const user = useUserStore((state) => state.user);
+
   return (
     <div className="min-h-screen bg-slate-50 md:flex">
       <AdminSidebar />
@@ -33,15 +36,23 @@ export default function AdminLayout({
               <Bell size={21} />
             </button>
 
-            <div className="flex items-center gap-2">
-              <UserCircle size={34} className="text-blue-600" />
+            <div className="flex items-center gap-2.5">
+              {user?.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.fullName}
+                  className="size-9 rounded-full object-cover border border-slate-200"
+                />
+              ) : (
+                <UserCircle size={34} className="text-blue-600" />
+              )}
 
               <div className="hidden sm:block">
                 <p className="text-sm font-semibold text-slate-800">
-                  Administrator
+                  {user?.fullName || "Administrator"}
                 </p>
                 <p className="text-xs text-slate-500">
-                  Quản trị viên
+                  {user?.email || "Quản trị viên"}
                 </p>
               </div>
             </div>
