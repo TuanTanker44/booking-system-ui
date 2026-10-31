@@ -13,6 +13,25 @@ export type BookingStatus =
 
 export type PricingUnit = "per_kg" | "per_item";
 
+export interface BookingDeliveryTrip {
+  id: number;
+  booking_id: number;
+  trip_type: "pickup" | "delivery";
+  shipper_id: number | null;
+  address_id: number;
+  scheduled_time: string;
+  started_at: string | null;
+  completed_at: string | null;
+  status: "unassigned" | "assigned" | "in_progress" | "completed" | "failed" | "cancelled";
+  shipper: {
+    id: number;
+    full_name: string;
+    phone: string | null;
+    email: string;
+    avatar_url: string | null;
+  } | null;
+}
+
 export interface BookingItemInput {
   item_name: string;
   category?: string;
@@ -54,6 +73,7 @@ export interface BookingItem {
 }
 
 export interface Booking {
+  delivery_trips?: BookingDeliveryTrip[];
   id: number;
   booking_code: string;
   qr_token: string | null;

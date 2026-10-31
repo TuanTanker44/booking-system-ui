@@ -7,7 +7,7 @@ import type { Address } from "../../types/address";
 import type { Booking, BookingDetail, BookingStatus } from "../../types/booking";
 import { PageHeading } from "./PageHeading";
 import { formatMoney, formatPickupSlot, statusClass } from "./format";
-import { useFetched } from "./useFetched";
+import { useFetched } from "../../hooks/useFetched";
 
 type Page = "home" | "booking" | "orders" | "addresses" | "profile";
 

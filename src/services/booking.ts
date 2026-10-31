@@ -103,7 +103,7 @@ export const ACTIVE_STATUSES: BookingStatus[] = [
   "delivering",
 ];
 
-export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
+export const BOOKING_STATUS_LABELS = {
   pending_payment: "Chờ thanh toán",
   confirmed: "Đã xác nhận",
   picked_up: "Đã lấy đồ",
@@ -113,4 +113,4 @@ export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   completed: "Hoàn thành",
   cancelled: "Đã hủy",
   no_show: "Không đến",
-};
+} as const satisfies Record<BookingStatus, string>;

@@ -29,6 +29,8 @@ export interface SearchStoresParams {
   lng?: number;
 }
 
+export type StoreStatus = 'active' | 'inactive';
+
 // Cửa hàng bán chạy: kèm số đơn đã hoàn thành (và điểm khớp khu vực nếu lọc theo khu vực)
 export interface TopSellingStore extends Omit<ApiStore, "latitude" | "longitude"> {
   completedBookings: number;

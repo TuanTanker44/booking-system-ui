@@ -13,6 +13,7 @@ import { EmailVerificationPage } from "../pages/auth/EmailVerificationPage";
 import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
 import { StaffDashboardPage } from '../pages/staff/StaffDashboardPage';
 import { PaymentResultPage } from "../pages/customer/PaymentResultPage";
+import StaffProfilePage from '../components/staff/profile/StaffProfilePage';
 
 // Có token trên URL (link từ email) thì xác minh, không thì hiện màn nhắc kiểm tra email
 function VerifyEmailRoute() {
@@ -36,8 +37,13 @@ export function AppRouter() {
       </Route>
 
       <Route element={<ProtectedRoute roles={['STAFF']} />}>
-        <Route path="/staff" element={<StaffDashboardPage />} />
-        <Route path="/staff/*" element={<Navigate to="/staff" replace />} />
+        <Route path="/staff/dashboard" element={<StaffDashboardPage />} />
+        <Route path="/staff/bookings" element={<StaffDashboardPage />} />
+        <Route path="/staff/services" element={<StaffDashboardPage />} />
+        <Route path="/staff/machines" element={<StaffDashboardPage />} />
+        <Route path="/staff/schedules" element={<StaffDashboardPage />} />
+        <Route path="/staff/profile" element={<StaffProfilePage />} />
+        <Route path="/staff/*" element={<Navigate to="/staff/dashboard" replace />} />
       </Route>
 
       <Route element={<ProtectedRoute roles={['CUSTOMER']} />}>

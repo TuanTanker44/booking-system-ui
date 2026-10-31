@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { toLocalDateString } from "../../lib/pickup";
+import { toLocalDateString } from "../lib/pickup";
 
 export type ItemRow = { key: number; name: string; quantity: number };
 

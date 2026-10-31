@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getErrorMessage } from "../../lib/error";
+import { getErrorMessage } from "../lib/error";
 
 export type FetchStatus = "idle" | "loading" | "ready" | "error";
 

@@ -1,0 +1,23 @@
+.staff-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  color: #2563eb;
+  background: #fff;
+  border: 1px solid #dbe4f0;
+  border-radius: 9px;
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.staff-refresh-button:hover:not(:disabled) { background: #eff6ff; }
+.staff-refresh-button:disabled { cursor: default; opacity: 0.6; }
+.staff-refresh-button__spinner { animation: staff-refresh-spin 1s linear infinite; }
+@keyframes staff-refresh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .staff-refresh-button__spinner { animation: none; }
+}

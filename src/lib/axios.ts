@@ -4,6 +4,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { useUserStore } from '../stores/user.js';
+import { useStoreStore } from '../stores/store';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -33,6 +34,7 @@ const getAccessToken = () => {
 
 const clearTokens = () => {
   localStorage.removeItem('accessToken');
+  useStoreStore.getState().clearStore();
 
   // Xoá phiên trong store để ProtectedRoute tự điều hướng về /login
   useUserStore.setState({

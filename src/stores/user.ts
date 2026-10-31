@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useStoreStore } from "./store";
 import { AuthService } from "../services/auth.js";
 import type { User } from "../types/user.js";
 import type {
@@ -31,6 +32,7 @@ function persistAccessToken(accessToken: string) {
 
 function clearPersistedTokens() {
   localStorage.removeItem("accessToken");
+  useStoreStore.getState().clearStore();
 }
 
 let initializePromise: Promise<void> | null = null;
@@ -98,6 +100,7 @@ export const useUserStore = create<UserState>((set) => ({
   },
 
   login: async (dto) => {
+    useStoreStore.getState().clearStore();
     set({ isLoading: true });
 
     try {

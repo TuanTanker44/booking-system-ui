@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local OpenAI notes and memory
+/openai/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

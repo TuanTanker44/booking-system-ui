@@ -351,6 +351,9 @@ svg {
 
 .notification-button {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .notification-button i {
@@ -1804,6 +1807,25 @@ svg {
   width: 14px;
   height: 14px;
   color: #18ad83;
+}
+.summary-minimum-order,
+.summary-slot-note,
+.summary-final-price {
+  font-size: 12px;
+}
+.summary-minimum-order {
+  margin-bottom: 16px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-weight: 600;
+}
+.summary-final-price {
+  margin-top: 16px;
+}
+.summary-final-price svg,
+.summary-slot-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 .summary-support {
   display: flex;

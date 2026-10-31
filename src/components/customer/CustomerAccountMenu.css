@@ -1,0 +1,46 @@
+.customer-account-menu { position: relative; flex-shrink: 0; }
+.customer-account-menu .user-menu--open { background: #f1f6ff; border-radius: 10px; }
+.customer-account-menu .user-menu > svg { transition: transform 0.2s; }
+.customer-account-menu .user-menu--open > svg { transform: rotate(180deg); }
+.customer-account-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 50;
+  width: 230px;
+  max-width: calc(100vw - 26px);
+  padding: 7px;
+  background: #fff;
+  border: 1px solid #e5ebf5;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(23 39 68 / 10%), 0 3px 8px rgb(23 39 68 / 4%);
+}
+.customer-account-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 11px;
+  color: #40516c;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.customer-account-dropdown button svg { flex-shrink: 0; color: #8190a7; }
+.customer-account-dropdown button:hover,
+.customer-account-dropdown button:focus-visible { color: #1769e0; background: #f1f6ff; }
+.customer-account-dropdown button:hover svg { color: inherit; }
+.customer-account-dropdown .customer-account-dropdown__logout,
+.customer-account-dropdown .customer-account-dropdown__logout svg { color: #dc3545; }
+.customer-account-dropdown .customer-account-dropdown__logout:hover,
+.customer-account-dropdown .customer-account-dropdown__logout:focus-visible { color: #c82333; background: #fff1f2; }
+.customer-account-dropdown__divider { height: 1px; margin: 5px 4px; background: #edf1f7; }
+@media (prefers-reduced-motion: reduce) {
+  .customer-account-menu .user-menu > svg { transition: none; }
+}

@@ -7,14 +7,15 @@ import { getErrorMessage } from "../../lib/error";
 import { MAX_ADVANCE_DAYS, addDays, toLocalDateString } from "../../lib/pickup";
 import { formatAddress } from "../../services/address";
 import { BookingService } from "../../services/booking";
+import { getDeliveryFee } from "../../services/delivery";
 import { getAvailableSlots, getStoreServices } from "../../services/store-booking";
 import type { Address } from "../../types/address";
 import type { Booking, CreateBookingInput } from "../../types/booking";
 import type { StoreService } from "../../types/store-booking";
 import { PageHeading } from "./PageHeading";
 import { formatMoney, formatStoreDate, formatStoreTime } from "./format";
-import { type BookingForm, type ItemRow } from "./useBookingForm";
-import { useFetched } from "./useFetched";
+import { type BookingForm, type ItemRow } from "../../hooks/useBookingForm";
+import { useFetched } from "../../hooks/useFetched";
 
 export type BookingStoreItem = {
   id: number; name: string; address: string; phone: string;
@@ -23,6 +24,8 @@ export type BookingStoreItem = {
 
 const STEP_LABELS = ["Cửa hàng & dịch vụ", "Thời gian & địa chỉ", "Xác nhận"];
 const MAX_ITEMS = 50;
+const MIN_ORDER_AMOUNT = 10_000;
+const MIN_ORDER_MESSAGE = "Đơn đặt hàng phải tối thiểu 10,000";
 
 // Phần dữ liệu theo loại dịch vụ: cân nặng (per_kg) hoặc danh sách món (per_item). null nếu chưa hợp lệ.
 function serviceInput(service: StoreService, weight: string, items: ItemRow[]): Pick<CreateBookingInput, "estimated_weight_kg" | "items"> | null {
@@ -115,6 +118,14 @@ export function BookingPage(props: {
   const slotList = slotsFetch.data?.slots ?? [];
   const slot = slotList.find(item => item.start === form.slot && item.is_available)?.start ?? slotList.find(item => item.is_available)?.start ?? null;
 
+  const [deliveryReloadToken, setDeliveryReloadToken] = useState(0);
+  const deliveryFetch = useFetched(
+    step >= 2 && !form.inStore && storeId !== null && addressesStatus === "ready" && activeAddress
+      ? `delivery-fee:${storeId}:${activeAddress.id}:${deliveryReloadToken}` : null,
+    (signal) => getDeliveryFee({ store_id: storeId!, pickup_address_id: activeAddress!.id }, signal),
+  );
+  const deliveryReady = form.inStore || deliveryFetch.status === "ready";
+
   // ---- Dữ liệu gửi lên backend
   const serviceFields = service ? serviceInput(service, form.weight, form.items) : null;
   const input: CreateBookingInput | null = storeId !== null && service && serviceFields && slot && (form.inStore || activeAddress)
@@ -133,12 +144,16 @@ export function BookingPage(props: {
 
   const estimate = service ? service.unit_price * serviceQuantity(service, form.weight, form.items) : 0;
 
-  const canContinue = step === 1
+  // Báo giá bước 3 đã bao gồm phí ship; chỉ cộng phí riêng khi chưa có quote.
+  const deliveryFee = form.inStore ? 0 : quote?.delivery_price ?? deliveryFetch.data?.total_fee;
+  const totalEstimate = quote?.estimated_price ?? estimate + (deliveryFee ?? 0);
+  const validOrderAmount = Number.isFinite(totalEstimate) && totalEstimate >= MIN_ORDER_AMOUNT;
+  const canContinue = validOrderAmount && (step === 1
     ? Boolean(storeId !== null && service && serviceFields)
-    : step === 2 ? Boolean(slot && (form.inStore || activeAddress)) : false;
+    : step === 2 ? Boolean(slot && (form.inStore || activeAddress) && deliveryReady) : false);
 
   const submit = async () => {
-    if (!input) return;
+    if (!input || submitting || quoteFetch.status !== "ready" || !quote) return;
     setSubmitting(true);
     try {
       const booking = await BookingService.create(input);
@@ -254,6 +269,8 @@ export function BookingPage(props: {
               {addressesStatus === "ready" && addresses.length === 0 && <p className="empty-summary">Bạn chưa có địa chỉ nào. Hãy thêm địa chỉ để tiếp tục đặt lịch.</p>}
               <div className="address-options">{addresses.map(item => <button key={item.id} className={`address-option ${activeAddress?.id === item.id ? "selected" : ""}`} onClick={() => setSelectedAddress(item.id)}><span className="radio-dot">{activeAddress?.id === item.id && <i />}</span>{item.label === "Nhà riêng" ? <Home /> : <MapPin />}<span><strong>{item.label}</strong><small>{item.recipientName} · {item.phone}</small><small>{formatAddress(item)}</small></span>{item.isDefault && <span className="default-tag">Mặc định</span>}</button>)}</div>
             </>}
+          {!form.inStore && deliveryFetch.status === "loading" && <p className="empty-summary" role="status">Đang tính phí giao nhận...</p>}
+          {!form.inStore && deliveryFetch.status === "error" && <div className="empty-summary" role="alert"><p>{deliveryFetch.error}</p><button type="button" className="text-link" onClick={() => setDeliveryReloadToken((value) => value + 1)}>Tính lại phí giao nhận</button></div>}
           <label className="field-label note-field">Ghi chú cho cửa hàng (không bắt buộc)<textarea maxLength={255} value={form.note} onChange={e => form.setNote(e.target.value)} placeholder="Ví dụ: gọi điện trước khi đến, giao tại sảnh..." rows={3} /></label>
         </div>}
 
@@ -270,7 +287,7 @@ export function BookingPage(props: {
           {quoteFetch.status === "error" && <p className="empty-summary" role="alert">{quoteFetch.error}</p>}
         </div>}
 
-        <div className="booking-actions">{step > 1 ? <button className="outline-button" onClick={() => setStep(step - 1)} disabled={submitting}>Quay lại</button> : <span className="booking-hint"><CheckCircle2 size={15} /> Không mất phí khi đặt lịch</span>}{step < 3 ? <button className="primary-button" disabled={!canContinue} onClick={() => setStep(step + 1)}>Tiếp tục <ArrowRight size={16} /></button> : <button className="primary-button" disabled={!input || quoteFetch.status !== "ready" || submitting} onClick={() => void submit()}><CheckCircle2 size={17} /> {submitting ? "Đang đặt lịch..." : "Xác nhận đặt lịch"}</button>}</div>
+        <div className="booking-actions">{step > 1 ? <button className="outline-button" onClick={() => setStep(step - 1)} disabled={submitting}>Quay lại</button> : <span className="booking-hint"><CheckCircle2 size={15} /> Không mất phí khi đặt lịch</span>}{step < 3 ? <button className="primary-button" disabled={!canContinue} onClick={() => setStep(step + 1)}>Tiếp tục <ArrowRight size={16} /></button> : <button className="primary-button" disabled={!input || quoteFetch.status !== "ready" || !validOrderAmount || submitting} onClick={() => void submit()}><CheckCircle2 size={17} /> {submitting ? "Đang đặt lịch..." : "Xác nhận đặt lịch"}</button>}</div>
       </div>
 
       <aside className="booking-summary"><div className="summary-title"><h3>Tóm tắt đơn hàng</h3><span className="summary-bag"><Package /></span></div>
@@ -281,11 +298,12 @@ export function BookingPage(props: {
         <div className="summary-coupon"><Tag /><input value={form.promoInput} onChange={e => form.setPromoInput(e.target.value)} placeholder="Mã ưu đãi" maxLength={30} /><button onClick={() => form.setAppliedPromo(form.promoInput.trim().toUpperCase())} disabled={form.promoInput.trim().toUpperCase() === form.appliedPromo}>Áp dụng</button></div>
         {form.appliedPromo && <div className="summary-footnote"><CheckCircle2 size={15} /> Mã {form.appliedPromo}{step === 3 ? (quote ? ` giảm ${formatMoney(quote.discount_amount)}` : "") : " sẽ được kiểm tra ở bước xác nhận"}. <button className="text-link" onClick={() => { form.setAppliedPromo(""); form.setPromoInput(""); }}>Bỏ mã</button></div>}
         <div className="summary-total"><span>Tạm tính</span><strong>{formatMoney(quote ? quote.subtotal : estimate)}</strong></div>
-        <div className="summary-total"><span>Phí giao nhận</span><strong>{quote?.delivery_price != null ? formatMoney(quote.delivery_price) : "Chưa tính"}</strong></div>
+        <div className="summary-total"><span>Phí giao nhận</span><strong>{deliveryFee != null ? formatMoney(deliveryFee) : deliveryFetch.status === "loading" ? "Đang tính..." : deliveryFetch.status === "error" ? "Không thể tính phí" : "Chưa tính"}</strong></div>
         <div className="summary-total"><span>Ưu đãi</span><strong className="discount-text">-{formatMoney(quote?.discount_amount ?? 0)}</strong></div>
-        <div className="summary-grand"><span>Tổng tạm tính</span><strong>{formatMoney(quote ? quote.estimated_price : estimate)}</strong></div>
-        {quote && <div className="summary-footnote"><CheckCircle2 size={15} /> Còn {quote.slots_left} chỗ trong khung giờ này{quote.estimated_delivery_at ? ` · dự kiến xong ${formatStoreDate(quote.estimated_delivery_at)} ${formatStoreTime(quote.estimated_delivery_at)}` : ""}.</div>}
-        <div className="summary-footnote"><CheckCircle2 size={15} /> Giá cuối cùng được xác nhận sau khi cửa hàng kiểm tra đồ.</div>
+        <div className="summary-grand"><span>Tổng tạm tính</span><strong>{step >= 2 && !deliveryReady && !quote ? "Chưa tính đủ phí giao nhận" : formatMoney(totalEstimate)}</strong></div>
+        {service && !validOrderAmount && <div className="summary-footnote summary-minimum-order" role="status">{MIN_ORDER_MESSAGE}</div>}
+        {quote && <div className="summary-footnote summary-slot-note"><CheckCircle2 size={15} /><span>Khung giờ này còn {quote.slots_left} chỗ{quote.estimated_delivery_at ? ` · Dự kiến hoàn thành: ${formatStoreDate(quote.estimated_delivery_at)} lúc ${formatStoreTime(quote.estimated_delivery_at)}` : ""}.</span></div>}
+        <div className="summary-footnote summary-final-price"><CheckCircle2 size={15} /> Giá cuối cùng được xác nhận sau khi cửa hàng kiểm tra đồ.</div>
         <div className="summary-support"><CircleHelp /><span>Cần hỗ trợ?<strong>1900 1234</strong></span></div>
       </aside>
     </div>

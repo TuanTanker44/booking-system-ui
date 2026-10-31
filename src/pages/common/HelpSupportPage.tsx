@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft, ArrowRight, BookOpen, CalendarCheck, CheckCircle2, ChevronDown,
-  CircleHelp, Clock3, CreditCard, Mail, MessageCircle, PackageCheck, Search,
+  CircleHelp, CreditCard, Mail, MessageCircle, PackageCheck, Search,
   ShieldCheck, Shirt, Sparkles, Truck, WashingMachine, XCircle,
 } from "lucide-react";
 import "./help-support.css";

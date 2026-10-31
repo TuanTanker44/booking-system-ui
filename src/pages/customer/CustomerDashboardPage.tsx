@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate as useRouterNavigate } from "react-router-dom";
 import { LocationPermissionDialog } from "../../components/customer/LocationPermissionDialog";
 import { Avatar } from "../../components/common/Avatar";
+import { CustomerAccountMenu } from "../../components/customer/CustomerAccountMenu";
 import { useUserStore } from "../../stores/user.js";
 import { AuthService } from "../../services/auth";
-import { changePassword, updateProfile, type UpdateUserPayload } from "../../services/user";
+import { userService, type UpdateUserPayload } from "../../services/user";
 import type { User } from "../../types/user";
-import { useFetched } from "./useFetched";
+import { useFetched } from "../../hooks/useFetched.js";
 import { GlobalSearch } from "../../components/customer/GlobalSearch";
 import type { SearchEntry } from "../../lib/search";
 import { getTopSellingStores, getTopSellingStoresByArea } from "../../services/store";
@@ -17,7 +18,7 @@ import { isPasswordValid, PASSWORD_RULES } from "../../lib/password";
 import { ACTIVE_STATUSES, BOOKING_STATUS_LABELS, BookingService } from "../../services/booking";
 import type { Booking } from "../../types/booking";
 import { BookingPage } from "./BookingPage";
-import { useBookingForm } from "./useBookingForm";
+import { useBookingForm } from "../../hooks/useBookingForm.js";
 import { OrdersPage } from "./OrdersPage";
 import { PageHeading } from "./PageHeading";
 import { formatMoney } from "./format";
@@ -30,7 +31,7 @@ import type { Address, AddressInput } from "../../types/address";
 import {
   MapPin, Home, CalendarDays, Package, MapPinned, UserRound, Settings,
   Bell, ChevronDown, ChevronRight, Plus, Clock3, Star, Truck,
-  CheckCircle2, WashingMachine, Shirt, Sparkles, WalletCards, Menu, X,
+  CheckCircle2, WashingMachine, Shirt, Sparkles, WalletCards, X,
   ArrowRight, CircleHelp, LogOut, Check, Eye, EyeOff, LockKeyhole, ShieldCheck,
   BedDouble, Footprints, LocateFixed, Phone, Pencil, Trash2, BadgeCheck,
 } from "lucide-react";
@@ -64,7 +65,6 @@ export function CustomerDashboardPage() {
   const user = useUserStore((state) => state.user);
   const displayName = user?.fullName || user?.email || "Khách hàng";
   const [page, setPage] = useState<Page>("home");
-  const [mobileMenu, setMobileMenu] = useState(false);
   const [search, setSearch] = useState("");
   const [orders, setOrders] = useState<Booking[]>([]);
   const [ordersTotal, setOrdersTotal] = useState(0);
@@ -167,7 +167,6 @@ export function CustomerDashboardPage() {
     setPage(next);
     // Rời khỏi đặt lịch thì bỏ yêu cầu chọn dịch vụ chưa xử lý xong
     if (next !== "booking") setRequestedServiceName(null);
-    setMobileMenu(false);
     setActiveOrder(null);
     // Rời trang thì bỏ phiên thanh toán đang mở (đơn vẫn ở trạng thái chờ thanh toán)
     setCheckoutBooking(null);
@@ -345,12 +344,10 @@ export function CustomerDashboardPage() {
 
   return (
     <div className="app-shell">
-      {mobileMenu && <button className="mobile-scrim" aria-label="Đóng menu" onClick={() => setMobileMenu(false)} />}
-      <aside className={`sidebar ${mobileMenu ? "sidebar-open" : ""}`}>
+      <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark"><WashingMachine size={23} /></span>
           <span>Laundry<span className="brand-blue">Booking</span><small>GIẶT SẠCH, SỐNG NHẸ</small></span>
-          <button className="icon-button close-menu" onClick={() => setMobileMenu(false)} aria-label="Đóng menu"><X /></button>
         </div>
         <div className="sidebar-label">MENU CHÍNH</div>
         <nav className="side-nav">
@@ -375,13 +372,12 @@ export function CustomerDashboardPage() {
 
       <main className="main-area">
         <header className="topbar">
-          <button className="icon-button menu-trigger" onClick={() => setMobileMenu(true)} aria-label="Mở menu"><Menu /></button>
           <div className="breadcrumb"><span>Khách hàng</span><ChevronRight size={14} /><strong>{navItems.find(item => item.id === page)?.label || "Trang chủ"}</strong></div>
           <GlobalSearch entries={searchEntries} onSelect={selectSearchEntry} />
           <div className="topbar-actions">
             <button className="icon-button notification-button" aria-label="Thông báo" onClick={() => notify("Bạn đã xem các thông báo mới nhất.")}><Bell /><i /></button>
             <div className="topbar-divider" />
-            <button className="user-menu" onClick={() => navigate("profile")}><Avatar className="avatar small-avatar" name={displayName} src={user?.avatarUrl} /><span>{displayName}</span><ChevronDown size={15} /></button>
+            <CustomerAccountMenu onProfile={() => navigate("profile")} />
           </div>
         </header>
 
@@ -660,7 +656,7 @@ function ProfileContent({ user, notify, addresses, addressesStatus, goToAddresse
     if (Object.keys(payload).length === 0) { setEditing(false); return; }
     setSaving(true);
     try {
-      await updateProfile(payload);
+      await userService.updateProfile(payload);
       // Cập nhật store để sidebar/header hiển thị thông tin mới
       useUserStore.setState({ user: await AuthService.getMe() });
       setEditing(false);
@@ -701,7 +697,7 @@ function ChangePasswordPanel({ notify, onCancel, onDone }: { notify: (message: s
     if (values.next !== values.confirm) { setError("Mật khẩu xác nhận không khớp."); return; }
     setSubmitting(true);
     try {
-      await changePassword({ current_password: values.current, new_password: values.next });
+      await userService.changePassword({ current_password: values.current, new_password: values.next });
       notify("Đã đổi mật khẩu thành công.");
       onDone();
     } catch (err) {
