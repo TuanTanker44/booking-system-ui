@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: './.env.local' });
 
 const port = 5173;
+const forceOptimize = process.argv.includes('--force');
 
 let vite;
 let forwarder;
@@ -26,7 +27,7 @@ async function shutdown() {
 async function main() {
   vite = spawn(
     'pnpm',
-    ['exec', 'vite', '--host', '0.0.0.0', '--port', String(port)],
+    ['exec', 'vite', '--host', '0.0.0.0', '--port', String(port), ...(forceOptimize ? ['--force'] : [])],
     {
       stdio: 'inherit',
       shell: process.platform === 'win32',

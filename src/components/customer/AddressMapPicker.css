@@ -1,0 +1,45 @@
+.address-form .form-grid {
+  align-items: start;
+}
+
+.address-location-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.field-label > .address-location-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.field-label > .address-location-actions > button {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  justify-content: center;
+  white-space: normal;
+}
+
+.address-map-picker {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #dbe4ee;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.address-map-picker p {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.address-map-picker-canvas {
+  height: clamp(280px, 45vh, 440px);
+  width: 100%;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  isolation: isolate;
+}

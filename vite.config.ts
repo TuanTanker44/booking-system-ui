@@ -10,6 +10,13 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss()
   ],
+  resolve: {
+    dedupe: ['react', 'react-dom']
+  },
+  optimizeDeps: {
+    // Keep the renderer and lazy components on the same React dependency graph.
+    include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react/compiler-runtime', 'maplibre-gl']
+  },
   server: {
     allowedHosts: ['steadier-driveway-reconcile.ngrok-free.dev']
   }

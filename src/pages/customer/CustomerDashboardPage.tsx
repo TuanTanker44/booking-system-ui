@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useNavigate as useRouterNavigate } from "react-router-dom";
+import "../../components/customer/AddressMapPicker.css";
+import { AddressMapErrorBoundary } from "../../components/customer/AddressMapErrorBoundary";
+import type { Coordinates } from "../../lib/location";
 import { LocationPermissionDialog } from "../../components/customer/LocationPermissionDialog";
 import { Avatar } from "../../components/common/Avatar";
 import { CustomerAccountMenu } from "../../components/customer/CustomerAccountMenu";
@@ -35,6 +38,8 @@ import {
   ArrowRight, CircleHelp, LogOut, Check, Eye, EyeOff, LockKeyhole, ShieldCheck,
   BedDouble, Footprints, LocateFixed, Phone, Pencil, Trash2, BadgeCheck,
 } from "lucide-react";
+
+const AddressMapPicker = lazy(() => import("../../components/customer/AddressMapPicker").then(module => ({ default: module.AddressMapPicker })));
 
 type Page = "home" | "booking" | "orders" | "addresses" | "profile";
 type Service = { id: number; name: string; description: string; price: number; unit: string; icon: "wash" | "shirt" | "bed" | "shoe" };
@@ -521,46 +526,70 @@ function AddressesPage({ notify, addresses, status, reload }: { notify: (message
   const [form, setForm] = useState<AddressFormState>(emptyAddressForm);
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const setField = <K extends keyof AddressFormState>(key: K, value: AddressFormState[K]) => setForm(current => ({ ...current, [key]: value }));
 
   const openCreate = () => {
     setEditingId(null);
+    setShowMap(false);
     // Địa chỉ đầu tiên tự là mặc định
     setForm({ ...emptyAddressForm, recipientName: user?.fullName ?? "", phone: user?.phone ?? "", isDefault: addresses.length === 0 });
     setShowForm(true);
   };
   const openEdit = (item: Address) => {
     setEditingId(item.id);
+    setShowMap(false);
     setForm({ label: item.label, recipientName: item.recipientName, phone: item.phone, addressLine: item.addressLine, ward: item.ward, district: item.district, city: item.city, latitude: item.latitude?.toString() ?? "", longitude: item.longitude?.toString() ?? "", isDefault: item.isDefault });
     setShowForm(true);
   };
-  const closeForm = () => setShowForm(false);
+  const closeForm = () => { if (!saving && !locating) { setShowForm(false); setShowMap(false); } };
   const districts = getDistricts(form.city);
   const wards = getWards(form.city, form.district);
   const changeCity = (city: string) => setForm(current => ({ ...current, city, district: "", ward: "" }));
   const changeDistrict = (district: string) => setForm(current => ({ ...current, district, ward: "" }));
 
-  // Điền địa chỉ + tọa độ từ vị trí hiện tại của thiết bị
+  // Giữ tọa độ ngay cả khi reverse geocode lỗi để người dùng có thể nhập địa chỉ tay.
+  const applyCoordinates = async (coordinates: Coordinates) => {
+    setForm(current => ({ ...current, latitude: coordinates.latitude.toString(), longitude: coordinates.longitude.toString() }));
+    try {
+      const parts = parseAddressParts(await reverseGeocode(coordinates));
+      if (!parts) throw new Error("Không tìm thấy địa chỉ.");
+      const city = matchName([...CITIES], parts.city) || stripAdminPrefix(parts.city);
+      const district = matchName(getDistricts(city), parts.district) || stripAdminPrefix(parts.district);
+      const ward = matchName(getWards(city, district), parts.ward) || stripAdminPrefix(parts.ward);
+      setForm(current => ({ ...current, addressLine: parts.addressLine, city, district, ward }));
+      notify("Đã điền địa chỉ từ vị trí đã chọn. Vui lòng kiểm tra thông tin trước khi lưu.");
+    } catch {
+      notify("Đã lưu tọa độ nhưng chưa lấy được địa chỉ. Vui lòng nhập các trường địa chỉ.");
+    }
+  };
+
   const useCurrentLocation = async () => {
     setLocating(true);
+    setShowMap(false);
     try {
-      const coordinates = await getCurrentCoordinates();
-      const parts = parseAddressParts(await reverseGeocode(coordinates));
-      // Ưu tiên tên chuẩn trong danh mục; không khớp thì vẫn điền giá trị định vị để người dùng tự sửa
-      const city = matchName([...CITIES], parts?.city ?? "") || stripAdminPrefix(parts?.city ?? "") || DEFAULT_CITY;
-      const district = matchName(getDistricts(city), parts?.district ?? "") || stripAdminPrefix(parts?.district ?? "");
-      const ward = matchName(getWards(city, district), parts?.ward ?? "") || stripAdminPrefix(parts?.ward ?? "");
-      setForm(current => ({ ...current, latitude: coordinates.latitude.toString(), longitude: coordinates.longitude.toString(), addressLine: parts?.addressLine ?? current.addressLine, city, district, ward }));
-      notify(parts ? "Đã điền địa chỉ từ vị trí hiện tại." : "Đã lấy tọa độ, vui lòng nhập địa chỉ.");
+      await applyCoordinates(await getCurrentCoordinates());
     } catch {
-      notify("Không thể lấy vị trí hiện tại. Vui lòng kiểm tra quyền truy cập vị trí.");
+      notify("Không thể lấy vị trí hiện tại. Bạn có thể chọn vị trí trên bản đồ.");
+    } finally {
+      setLocating(false);
+    }
+  };
+
+  const chooseMapLocation = async (coordinates: Coordinates) => {
+    setShowMap(false);
+    setLocating(true);
+    try {
+      await applyCoordinates(coordinates);
     } finally {
       setLocating(false);
     }
   };
 
   const save = async () => {
-    const input: AddressInput = { ...form, latitude: form.latitude.trim() ? Number(form.latitude) : null, longitude: form.longitude.trim() ? Number(form.longitude) : null, recipientName: form.recipientName.trim(), phone: form.phone.trim(), addressLine: form.addressLine.trim(), ward: form.ward.trim(), district: form.district.trim(), city: form.city.trim() };
+    if (saving || locating) return;
+    if (!form.latitude || !form.longitude) { notify("Vui lòng dùng vị trí hiện tại hoặc chọn địa chỉ trên bản đồ trước khi lưu."); return; }
+    const input: AddressInput = { ...form, latitude: Number(form.latitude), longitude: Number(form.longitude), recipientName: form.recipientName.trim(), phone: form.phone.trim(), addressLine: form.addressLine.trim(), ward: form.ward.trim(), district: form.district.trim(), city: form.city.trim() };
     if (!input.recipientName || !input.phone || !input.addressLine || !input.ward || !input.district || !input.city) { notify("Vui lòng nhập đầy đủ thông tin địa chỉ."); return; }
     if (input.phone.replace(/\D/g, "").length < 9) { notify("Số điện thoại không hợp lệ."); return; }
 
@@ -598,20 +627,20 @@ function AddressesPage({ notify, addresses, status, reload }: { notify: (message
 
   return <>
     <PageHeading eyebrow="SỔ ĐỊA CHỈ" title="Địa chỉ của tôi" description="Quản lý địa chỉ lấy và giao đồ giặt của bạn." action={<button className="primary-button" onClick={openCreate}><Plus size={17} /> Thêm địa chỉ</button>} />
-    {showForm && <div className="panel address-form"><div className="panel-heading"><div><h2><MapPinned /> {editingId === null ? "Thêm địa chỉ mới" : "Chỉnh sửa địa chỉ"}</h2><p>Thông tin này sẽ được dùng khi đặt lịch lấy và giao đồ.</p></div><button className="icon-button" onClick={closeForm} aria-label="Đóng"><X /></button></div><div className="form-grid"><label className="field-label">Tên địa chỉ<select value={form.label} onChange={e => setField("label", e.target.value)}><option>Nhà riêng</option><option>Cơ quan</option><option>Khác</option></select></label><label className="field-label">Người nhận<input value={form.recipientName} onChange={e => setField("recipientName", e.target.value)} placeholder="Họ và tên người nhận" /></label><label className="field-label">Số điện thoại<input type="tel" value={form.phone} onChange={e => setField("phone", e.target.value)} placeholder="09xx xxx xxx" /></label><label className="field-label field-span">Số nhà, tên đường<input value={form.addressLine} onChange={e => setField("addressLine", e.target.value)} placeholder="Ví dụ: Số 123, đường Xuân Thủy" /></label><label className="field-label">Tỉnh/Thành phố<AddressSelect value={form.city} options={[...CITIES]} placeholder="Chọn tỉnh/thành phố" onChange={changeCity} /></label><label className="field-label">Quận/Huyện<AddressSelect value={form.district} options={districts} placeholder="Chọn quận/huyện" disabled={!form.city} onChange={changeDistrict} /></label><label className="field-label">Phường/Xã{wards.length > 0 || !form.district ? <AddressSelect value={form.ward} options={wards} placeholder="Chọn phường/xã" disabled={!form.district} onChange={ward => setField("ward", ward)} /> : <input value={form.ward} onChange={e => setField("ward", e.target.value)} placeholder="Nhập phường/xã" />}</label><div className="field-label"><span>Vị trí trên bản đồ</span><button type="button" className="outline-button" onClick={useCurrentLocation} disabled={locating}><LocateFixed size={16} /> {locating ? "Đang định vị..." : form.latitude !== "" ? "Cập nhật vị trí hiện tại" : "Dùng vị trí hiện tại"}</button>{form.latitude !== "" && form.longitude !== "" && <small>{form.latitude}, {form.longitude}</small>}</div>{editingId === null && <>
-      <label className="field-label">Vĩ độ (tùy chọn)
-        <input type="text" inputMode="decimal" value={form.latitude} onChange={e => setField("latitude", e.target.value)} placeholder="Ví dụ: 21.02851" disabled={saving || locating} />
-      </label>
-      <label className="field-label">Kinh độ (tùy chọn)
-        <input type="text" inputMode="decimal" value={form.longitude} onChange={e => setField("longitude", e.target.value)} placeholder="Ví dụ: 105.80482" disabled={saving || locating} />
-      </label>
-      <p className="field-span">Nếu không dùng vị trí hiện tại, bạn có thể nhập tọa độ của địa chỉ từ bản đồ. Hãy nhập cả vĩ độ (-90 đến 90) và kinh độ (-180 đến 180), dùng dấu chấm cho phần thập phân.</p>
-    </>}<label className="field-span checkbox-field"><input type="checkbox" checked={form.isDefault} onChange={e => setField("isDefault", e.target.checked)} /> Đặt làm địa chỉ mặc định</label></div><div className="form-actions"><button className="outline-button" onClick={closeForm} disabled={saving}>Hủy</button><button className="primary-button" onClick={save} disabled={saving}><Check size={16} /> {saving ? "Đang lưu..." : "Lưu địa chỉ"}</button></div></div>}
+    {showForm && <div className="panel address-form"><div className="panel-heading"><div><h2><MapPinned /> {editingId === null ? "Thêm địa chỉ mới" : "Chỉnh sửa địa chỉ"}</h2><p>Thông tin này sẽ được dùng khi đặt lịch lấy và giao đồ.</p></div><button className="icon-button" onClick={closeForm} aria-label="Đóng"><X /></button></div><div className="form-grid"><label className="field-label">Tên địa chỉ<select value={form.label} onChange={e => setField("label", e.target.value)}><option>Nhà riêng</option><option>Cơ quan</option><option>Khác</option></select></label><label className="field-label">Người nhận<input value={form.recipientName} onChange={e => setField("recipientName", e.target.value)} placeholder="Họ và tên người nhận" /></label><label className="field-label">Số điện thoại<input type="tel" value={form.phone} onChange={e => setField("phone", e.target.value)} placeholder="09xx xxx xxx" /></label><label className="field-label field-span">Số nhà, tên đường<input value={form.addressLine} onChange={e => setField("addressLine", e.target.value)} placeholder="Ví dụ: Số 123, đường Xuân Thủy" /></label><label className="field-label">Tỉnh/Thành phố<AddressSelect value={form.city} options={[...CITIES]} placeholder="Chọn tỉnh/thành phố" onChange={changeCity} /></label><label className="field-label">Quận/Huyện<AddressSelect value={form.district} options={districts} placeholder="Chọn quận/huyện" disabled={!form.city} onChange={changeDistrict} /></label><label className="field-label">Phường/Xã{wards.length > 0 || !form.district ? <AddressSelect value={form.ward} options={wards} placeholder="Chọn phường/xã" disabled={!form.district} onChange={ward => setField("ward", ward)} /> : <input value={form.ward} onChange={e => setField("ward", e.target.value)} placeholder="Nhập phường/xã" />}</label><div className="field-label"><span>Vị trí địa chỉ (bắt buộc)</span>
+      <div className="address-location-actions">
+        <button type="button" className="outline-button" onClick={useCurrentLocation} disabled={locating || saving}><LocateFixed size={16} /> {locating ? "Đang lấy địa chỉ..." : "Vị trí hiện tại"}</button>
+        <button type="button" className="outline-button" onClick={() => setShowMap(current => !current)} disabled={locating || saving} aria-expanded={showMap}><MapPinned size={16} /> Chọn trên bản đồ</button>
+      </div>
+      {form.latitude && form.longitude ? <small>Vĩ độ: {Number(form.latitude).toFixed(6)} · Kinh độ: {Number(form.longitude).toFixed(6)}</small> : <small>Chọn vị trí để lưu tọa độ của địa chỉ.</small>}
+    </div>
+    {showMap && <AddressMapErrorBoundary onClose={() => setShowMap(false)}><Suspense fallback={<p className="field-span" role="status">Đang tải bản đồ...</p>}><AddressMapPicker initialCoordinates={form.latitude && form.longitude ? { latitude: Number(form.latitude), longitude: Number(form.longitude) } : null} onConfirm={chooseMapLocation} onCancel={() => setShowMap(false)} /></Suspense></AddressMapErrorBoundary>}
+    <label className="field-span checkbox-field"><input type="checkbox" checked={form.isDefault} onChange={e => setField("isDefault", e.target.checked)} /> Đặt làm địa chỉ mặc định</label></div><div className="form-actions"><button className="outline-button" onClick={closeForm} disabled={saving}>Hủy</button><button className="primary-button" onClick={save} disabled={saving || locating || showMap}><Check size={16} /> {saving ? "Đang lưu..." : "Lưu địa chỉ"}</button></div></div>}
     {status === "loading" && <p>Đang tải địa chỉ...</p>}
     {status === "error" && <p>Không thể tải danh sách địa chỉ. <button className="outline-button" onClick={() => void reload()}>Thử lại</button></p>}
     <div className="address-page-grid">{addresses.map(item => <div className="panel address-card" key={item.id}><div className="address-card-top"><span className="address-large-icon">{item.label === "Nhà riêng" ? <Home /> : <MapPin />}</span><div className="address-title"><h3>{item.label}</h3>{item.isDefault && <span className="default-tag">Mặc định</span>}</div></div><div className="address-recipient"><strong>{item.recipientName}</strong><span><Phone size={14} /> {item.phone}</span></div><p className="address-full"><MapPin size={15} />{formatAddress(item)}</p><div className="address-card-actions"><button onClick={() => openEdit(item)}><Pencil size={15} /> Chỉnh sửa</button><button onClick={() => void remove(item)}><Trash2 size={15} /> Xóa</button>{!item.isDefault && <button onClick={() => void makeDefault(item)}><CheckCircle2 size={15} /> Đặt mặc định</button>}</div></div>)}
       <button className="add-address-card" onClick={openCreate}><span><Plus /></span><strong>Thêm địa chỉ mới</strong><small>Lưu địa chỉ để đặt lịch nhanh hơn</small></button></div>
-    <div className="address-tip"><LocateFixed /><div><strong>Mẹo nhỏ</strong><p>Hãy nhập địa chỉ càng chi tiết càng tốt để shipper tìm bạn nhanh hơn. Bấm "Dùng vị trí hiện tại" để lưu tọa độ chính xác hơn.</p></div></div>
+    <div className="address-tip"><LocateFixed /><div><strong>Mẹo nhỏ</strong><p>Hãy nhập địa chỉ càng chi tiết càng tốt để shipper tìm bạn nhanh hơn. Dùng "Vị trí hiện tại" hoặc "Chọn trên bản đồ" để lưu tọa độ của địa chỉ.</p></div></div>
   </>;
 }
 

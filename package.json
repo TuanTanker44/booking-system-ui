@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/start-dev.mjs",
+    "dev:force": "node scripts/start-dev.mjs --force",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -16,6 +17,7 @@
     "axios": "^1.19.0",
     "dotenv": "^18.0.9",
     "lucide-react": "^1.55.0",
+    "maplibre-gl": "^6.16.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-hook-form": "^7.89.0",

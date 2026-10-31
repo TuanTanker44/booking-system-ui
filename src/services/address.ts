@@ -30,6 +30,17 @@ function toApiBody(input: AddressInput) {
   };
 }
 
+function toApiCoordinates(input: AddressInput) {
+  const { latitude, longitude } = input;
+  if (latitude == null || longitude == null) {
+    throw new Error("Vui lòng chọn vị trí địa chỉ trên bản đồ hoặc dùng vị trí hiện tại.");
+  }
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    throw new Error("Tọa độ không hợp lệ.");
+  }
+  return { lat: latitude, long: longitude };
+}
+
 // Hiển thị địa chỉ đầy đủ trên một dòng
 export function formatAddress(address: Address): string {
   return [address.addressLine, address.ward, address.district, address.city]
@@ -48,22 +59,17 @@ export const AddressService = {
   },
 
   async create(input: AddressInput): Promise<void> {
-    const { latitude, longitude } = input;
-    const hasCoordinates = latitude != null && longitude != null;
-    if (hasCoordinates && (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180)) {
-      throw new Error("Tọa độ không hợp lệ.");
-    }
-    if ((latitude != null) !== (longitude != null)) {
-      throw new Error("Vui lòng nhập đủ vĩ độ và kinh độ.");
-    }
     await axiosInstance.post("/addresses", {
       ...toApiBody(input),
-      ...(hasCoordinates ? { lat: latitude, long: longitude } : {}),
+      ...toApiCoordinates(input),
     });
   },
 
   async update(id: number, input: AddressInput): Promise<void> {
-    await axiosInstance.patch(`/addresses/${id}`, toApiBody(input));
+    await axiosInstance.patch(`/addresses/${id}`, {
+      ...toApiBody(input),
+      ...toApiCoordinates(input),
+    });
   },
 
   async setDefault(id: number): Promise<void> {
