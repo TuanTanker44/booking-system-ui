@@ -2,6 +2,8 @@
 
 Frontend React + TypeScript + Vite của Laundry Booking System, gọi API backend (NestJS) thật. Giao diện responsive theo phong cách xanh dương/trắng, gồm khu vực Customer (đặt lịch giặt, đơn hàng, địa chỉ, tài khoản), khu vực Admin (quản lý người dùng) và khu vực Staff (đang phát triển).
 
+Link demo testing: https://drive.google.com/file/d/17UDsdSo0szWrrV4VvJh2mrrX5pWhBysg/view?usp=sharing
+
 ## Chạy dự án
 
 Yêu cầu Node.js 20+, pnpm và một backend API đang chạy.
